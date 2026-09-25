@@ -56,7 +56,7 @@ class EpisodeWrapper(Wrapper):
         if self.record_ori_obs:
             info.ori_obs = jtu.tree_map(jnp.zeros_like, state.obs)
         if self.record_episode_return:
-            info.episode_return = jnp.zeros(())
+            info.episode_return = jtu.tree_map(jnp.zeros_like, state.reward)
 
         return state.replace(info=info)
 

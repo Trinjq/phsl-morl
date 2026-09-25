@@ -21,6 +21,7 @@ from .wrappers.training_wrapper import (
     VmapEnvPoolAutoResetWrapper,
     VmapWrapper,
 )
+from .wrappers.preference_wrapper import EpisodePreferenceWrapper
 
 
 class BraxAdapter(EnvAdapter):
@@ -87,18 +88,46 @@ class BraxAdapter(EnvAdapter):
             )
 
 
-def create_brax_env(env_name: str, **kwargs) -> BraxAdapter:
+class MOWalker2dAdapter(BraxAdapter):
+    """Brax Walker2d with the source-faithful PD-MORL reward vector."""
+
+    def reset(self, key: chex.PRNGKey) -> EnvState:
+        state = super().reset(key)
+        return state.replace(reward=jnp.zeros((2,), dtype=state.reward.dtype))
+
+    def step(self, state: EnvState, action: Action) -> EnvState:
+        action = jnp.clip(action, -1.0, 1.0)
+        state = super().step(state, action)
+        reward = jnp.stack(
+            (
+                state.info.metrics.x_velocity + 1.0,
+                5.0 - jnp.sum(jnp.square(action), axis=-1),
+            ),
+            axis=-1,
+        )
+        return state.replace(reward=reward)
+
+
+def create_brax_env(
+    env_name: str, vector_reward: bool = False, **kwargs
+) -> BraxAdapter:
     """Create Brax environment.
 
     Args:
         env_name: Environment name.
+        vector_reward: Use the two-objective PD-MORL reward for Walker2d.
         kwargs: Arguments passing into Brax.
 
     Returns:
         Brax env.
     """
     env = get_environment(env_name, **kwargs)
-    env = BraxAdapter(env)
+    if vector_reward:
+        if env_name != "walker2d":
+            raise ValueError("vector_reward is currently supported only for walker2d")
+        env = MOWalker2dAdapter(env)
+    else:
+        env = BraxAdapter(env)
 
     return env
 
@@ -110,6 +139,8 @@ def create_wrapped_brax_env(
     autoreset_mode: AutoresetMode = AutoresetMode.NORMAL,
     discount: float | None = 1.0,
     record_ori_obs: bool = False,
+    vector_reward: bool = False,
+    episode_preference: bool = False,
     **kwargs,
 ) -> Env:
     """Create wrapped Brax environment for training.
@@ -121,13 +152,15 @@ def create_wrapped_brax_env(
         autoreset_mode: Autoreset mode.
         discount: Discount factor.
         record_ori_obs: Whether record original observation in AutoresetMode.NORMAL and AutoresetMode.FAST mode.
+        vector_reward: Use the two-objective PD-MORL reward for Walker2d.
+        episode_preference: Maintain one temporary preference per environment episode.
         kwargs: Other arguments passing into Brax.
 
     Returns:
         Wrapped Brax env.
 
     """
-    env = create_brax_env(env_name, **kwargs)
+    env = create_brax_env(env_name, vector_reward=vector_reward, **kwargs)
 
     if autoreset_mode == AutoresetMode.ENVPOOL:
         # envpool mode will always record last obs
@@ -149,5 +182,8 @@ def create_wrapped_brax_env(
     else:
         env = OneEpisodeWrapper(env, episode_length, record_ori_obs=record_ori_obs)
         env = VmapWrapper(env, num_envs=parallel, vmap_step=True)
+
+    if episode_preference:
+        env = EpisodePreferenceWrapper(env)
 
     return env

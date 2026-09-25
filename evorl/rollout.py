@@ -49,6 +49,9 @@ def env_step(
     sample_batch = SampleBatch(obs=env_state.obs)
 
     actions, policy_extras = action_fn(agent_state, sample_batch, key)
+    policy_extras = PyTreeDict(policy_extras)
+    if "preference" in env_state.info:
+        policy_extras.preference = env_state.info.preference
     env_nstate = env_fn(env_state, actions)
 
     info = env_nstate.info
