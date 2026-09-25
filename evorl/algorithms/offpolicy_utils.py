@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
     """Wrapping some common template for off-policy RL with TD Learning."""
 
+    env_extra_fields = ("ori_obs", "termination")
+
     @classmethod
     def _rescale_config(cls, config: DictConfig) -> None:
         num_devices = jax.device_count()
@@ -111,7 +113,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
                 agent_state=agent_state,
                 key=rollout_key,
                 rollout_length=rollout_length,
-                env_extra_fields=("ori_obs", "termination"),
+                env_extra_fields=self.env_extra_fields,
             )
 
             # [T, B, ...] -> [T*B, ...]

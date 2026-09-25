@@ -46,7 +46,13 @@ def env_step(
 ) -> tuple[SampleBatch, EnvState]:
     """Collect one-step data."""
     # sample_batch: [#envs, ...]
-    sample_batch = SampleBatch(obs=env_state.obs)
+    policy_extras = PyTreeDict()
+    if "preference" in env_state.info:
+        policy_extras.preference = env_state.info.preference
+    sample_batch = SampleBatch(
+        obs=env_state.obs,
+        extras=PyTreeDict(policy_extras=policy_extras),
+    )
 
     actions, policy_extras = action_fn(agent_state, sample_batch, key)
     policy_extras = PyTreeDict(policy_extras)
@@ -78,7 +84,13 @@ def eval_env_step(
 ) -> tuple[SampleBatch, EnvState]:
     """Collect one-step data in evaluation mode."""
     # sample_batch: [#envs, ...]
-    sample_batch = SampleBatch(obs=env_state.obs)
+    policy_extras = PyTreeDict()
+    if "preference" in env_state.info:
+        policy_extras.preference = env_state.info.preference
+    sample_batch = SampleBatch(
+        obs=env_state.obs,
+        extras=PyTreeDict(policy_extras=policy_extras),
+    )
 
     actions, policy_extras = action_fn(agent_state, sample_batch, key)
     env_nstate = env_fn(env_state, actions)
