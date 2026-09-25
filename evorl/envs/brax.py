@@ -21,7 +21,10 @@ from .wrappers.training_wrapper import (
     VmapEnvPoolAutoResetWrapper,
     VmapWrapper,
 )
-from .wrappers.preference_wrapper import EpisodePreferenceWrapper
+from .wrappers.preference_wrapper import (
+    EpisodePreferenceWrapper,
+    make_logical_worker_ids,
+)
 
 
 class BraxAdapter(EnvAdapter):
@@ -141,6 +144,7 @@ def create_wrapped_brax_env(
     record_ori_obs: bool = False,
     vector_reward: bool = False,
     episode_preference: bool = False,
+    process_count: int = 10,
     **kwargs,
 ) -> Env:
     """Create wrapped Brax environment for training.
@@ -154,12 +158,17 @@ def create_wrapped_brax_env(
         record_ori_obs: Whether record original observation in AutoresetMode.NORMAL and AutoresetMode.FAST mode.
         vector_reward: Use the two-objective PD-MORL reward for Walker2d.
         episode_preference: Maintain one temporary preference per environment episode.
+        process_count: Number of logical preference workers/subspaces.
         kwargs: Other arguments passing into Brax.
 
     Returns:
         Wrapped Brax env.
 
     """
+    logical_worker_ids = None
+    if episode_preference:
+        logical_worker_ids = make_logical_worker_ids(parallel, process_count)
+
     env = create_brax_env(env_name, vector_reward=vector_reward, **kwargs)
 
     if autoreset_mode == AutoresetMode.ENVPOOL:
@@ -184,6 +193,6 @@ def create_wrapped_brax_env(
         env = VmapWrapper(env, num_envs=parallel, vmap_step=True)
 
     if episode_preference:
-        env = EpisodePreferenceWrapper(env)
+        env = EpisodePreferenceWrapper(env, logical_worker_ids, process_count)
 
     return env
