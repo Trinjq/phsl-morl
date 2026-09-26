@@ -15,7 +15,14 @@ from evorl.networks import MLP
 from evorl.replay_buffers import ReplayBuffer
 from evorl.replay_buffers.her import add_her_transitions
 from evorl.sample_batch import SampleBatch
-from evorl.types import Action, LossDict, PolicyExtraInfo, PyTreeDict, pytree_field
+from evorl.types import (
+    Action,
+    LossDict,
+    PolicyExtraInfo,
+    PyTreeDict,
+    State,
+    pytree_field,
+)
 from evorl.utils import running_statistics
 from evorl.utils.jax_utils import tree_get
 from evorl.utils.morl_math import scalarize
@@ -64,6 +71,26 @@ def add_target_policy_smoothing(
     return jnp.clip(actions + noise, -1.0, 1.0)
 
 
+def parallel_actor_update_mask(
+    round_index: chex.Array, process_count: int, policy_freq: int
+) -> chex.Array:
+    """Actor-update positions for K source-faithful learner calls."""
+    update_ids = round_index * process_count + jnp.arange(1, process_count + 1)
+    return update_ids % policy_freq == 0
+
+
+def select_warmup_actions(
+    policy_actions: chex.Array,
+    random_actions: chex.Array,
+    worker_steps: chex.Array,
+    start_timesteps: int,
+) -> chex.Array:
+    """Select random actions for logical workers still in source warm-up."""
+    worker_ids = jnp.arange(policy_actions.shape[0]) % worker_steps.shape[0]
+    random_mask = worker_steps[worker_ids] < start_timesteps
+    return jnp.where(random_mask[..., None], random_actions, policy_actions)
+
+
 class PreferenceActor(nn.Module):
     action_size: int
     hidden_layer_sizes: tuple[int, ...] = (400, 400)
@@ -110,6 +137,10 @@ class MOTD3Agent(TD3Agent):
 
     obs_preprocessor: Any = pytree_field(default=None, static=True)
     reward_size: int = pytree_field(default=2, static=True)
+    process_count: int = pytree_field(default=1, static=True)
+    start_timesteps: int = pytree_field(default=10000, static=True)
+    action_low: chex.Array | None = None
+    action_high: chex.Array | None = None
 
     def init(
         self, obs_space: Space, action_space: Space, key: chex.PRNGKey
@@ -140,6 +171,9 @@ class MOTD3Agent(TD3Agent):
         return AgentState(
             params=params_state,
             obs_preprocessor_state=obs_preprocessor_state,
+            extra_state=PyTreeDict(
+                worker_steps=jnp.zeros((self.process_count,), dtype=jnp.uint32)
+            ),
         )
 
     @staticmethod
@@ -154,11 +188,29 @@ class MOTD3Agent(TD3Agent):
         if self.normalize_obs:
             obs = self.obs_preprocessor(obs, agent_state.obs_preprocessor_state)
 
-        actions = self.actor_network.apply(
+        policy_actions = self.actor_network.apply(
             agent_state.params.actor_params, obs, preference
         )
-        actions += jax.random.normal(key, actions.shape) * self.exploration_epsilon
-        actions = jnp.clip(actions, -1.0, 1.0)
+        noise_key, random_key = jax.random.split(key)
+        policy_actions += (
+            jax.random.normal(noise_key, policy_actions.shape)
+            * self.exploration_epsilon
+        )
+        policy_actions = jnp.clip(
+            policy_actions, self.action_low, self.action_high
+        )
+        random_actions = jax.random.uniform(
+            random_key,
+            policy_actions.shape,
+            minval=self.action_low,
+            maxval=self.action_high,
+        )
+        actions = select_warmup_actions(
+            policy_actions,
+            random_actions,
+            agent_state.extra_state.worker_steps,
+            self.start_timesteps,
+        )
         return actions, PyTreeDict(preference=preference)
 
     def evaluate_actions(
@@ -259,6 +311,8 @@ def make_mo_td3_agent(
     policy_noise: float = 0.2,
     clip_policy_noise: float = 0.5,
     normalize_obs: bool = False,
+    process_count: int = 1,
+    start_timesteps: int = 10000,
 ) -> MOTD3Agent:
     assert isinstance(action_space, Box), "Only continuous action spaces are supported."
     max_action = float(jnp.max(action_space.high))
@@ -276,6 +330,10 @@ def make_mo_td3_agent(
         actor_network=actor_network,
         obs_preprocessor=(running_statistics.normalize if normalize_obs else None),
         reward_size=reward_size,
+        process_count=process_count,
+        start_timesteps=start_timesteps,
+        action_low=action_space.low,
+        action_high=action_space.high,
         discount=discount,
         exploration_epsilon=exploration_epsilon,
         policy_noise=policy_noise,
@@ -312,6 +370,8 @@ class MOTD3Workflow(TD3Workflow):
             policy_noise=config.policy_noise,
             clip_policy_noise=config.clip_policy_noise,
             normalize_obs=config.normalize_obs,
+            process_count=config.process_count,
+            start_timesteps=config.start_timesteps,
         )
         optimizer = optax.chain(
             optax.clip_by_global_norm(config.optimizer.grad_clip_norm),
@@ -320,7 +380,7 @@ class MOTD3Workflow(TD3Workflow):
         replay_buffer = ReplayBuffer(
             capacity=config.replay_buffer_capacity,
             min_sample_timesteps=max(
-                config.batch_size, config.learning_start_timesteps
+                config.batch_size, config.learner_start_replay_entries
             ),
             sample_batch_size=config.batch_size,
         )
@@ -368,6 +428,40 @@ class MOTD3Workflow(TD3Workflow):
             trajectory,
             jax.random.fold_in(key, 0x484552),
             self.config.num_relabel_preferences,
-            self.config.learning_start_timesteps,
+            self.config.her_start_timesteps,
             self.config.process_count,
+        )
+
+    def _postsetup_replaybuffer(self, state: State) -> State:
+        state = super()._postsetup_replaybuffer(state)
+        prefill_steps = (
+            self.config.learning_start_timesteps + self.config.num_envs - 1
+        ) // self.config.num_envs
+        return state.replace(
+            agent_state=state.agent_state.replace(
+                extra_state=state.agent_state.extra_state.replace(
+                    worker_steps=jnp.full(
+                        (self.config.process_count,),
+                        prefill_steps,
+                        dtype=jnp.uint32,
+                    )
+                )
+            )
+        )
+
+    def step(self, state: State):
+        train_metrics, state = super().step(state)
+        agent_state = state.agent_state.replace(
+            extra_state=state.agent_state.extra_state.replace(
+                worker_steps=state.agent_state.extra_state.worker_steps
+                + jnp.uint32(self.config.rollout_length)
+            )
+        )
+        return train_metrics, state.replace(agent_state=agent_state)
+
+    def _parallel_actor_update_mask(self, state):
+        return parallel_actor_update_mask(
+            state.metrics.iterations,
+            self.config.process_count,
+            self.config.actor_update_interval,
         )

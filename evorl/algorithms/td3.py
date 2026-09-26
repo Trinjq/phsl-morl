@@ -360,6 +360,10 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
         )
         return agent_state, opt_state
 
+    def _parallel_actor_update_mask(self, state: State):
+        del state
+        return None
+
     def step(self, state: State) -> tuple[MetricBase, State]:
         key, rollout_key, learn_key = jax.random.split(state.key, num=3)
 
@@ -427,94 +431,178 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
             detach_fn=lambda agent_state: agent_state.params.actor_params,
         )
 
-        def _sample_and_update_fn(carry, unused_t):
-            key, agent_state, opt_state = carry
+        parallel_actor_mask = self._parallel_actor_update_mask(state)
+        if parallel_actor_mask is not None:
 
-            critic_opt_state = opt_state.critic
-            actor_opt_state = opt_state.actor
-
-            key, critic_key, actor_key, rb_key = jax.random.split(key, num=4)
-
-            if self.config.actor_update_interval - 1 > 0:
-
-                def _sample_and_update_critic_fn(carry, unused_t):
-                    key, agent_state, critic_opt_state = carry
-
-                    key, rb_key, critic_key = jax.random.split(key, num=3)
-                    # it's safe to use read-only replay_buffer_state here.
-                    sample_batch = self.replay_buffer.sample(
-                        replay_buffer_state, rb_key
+            def _parallel_update(carry, actor_due):
+                key, agent_state, opt_state, actor_loss, actor_loss_dict = carry
+                key, critic_key, actor_key, rb_key = jax.random.split(key, num=4)
+                sample_batch = self.replay_buffer.sample(replay_buffer_state, rb_key)
+                critic_opt_state = opt_state.critic
+                actor_opt_state = opt_state.actor
+                (critic_loss, critic_loss_dict), agent_state, critic_opt_state = (
+                    critic_update_fn(
+                        critic_opt_state, agent_state, sample_batch, critic_key
                     )
+                )
 
-                    (critic_loss, critic_loss_dict), agent_state, critic_opt_state = (
-                        critic_update_fn(
-                            critic_opt_state, agent_state, sample_batch, critic_key
+                def _update_actor(operand):
+                    agent_state, actor_opt_state = operand
+                    (actor_loss, actor_loss_dict), agent_state, actor_opt_state = (
+                        actor_update_fn(
+                            actor_opt_state, agent_state, sample_batch, actor_key
                         )
                     )
+                    target_actor_params = soft_target_update(
+                        agent_state.params.target_actor_params,
+                        agent_state.params.actor_params,
+                        self.config.tau,
+                    )
+                    target_critic_params = soft_target_update(
+                        agent_state.params.target_critic_params,
+                        agent_state.params.critic_params,
+                        self.config.tau,
+                    )
+                    agent_state = agent_state.replace(
+                        params=agent_state.params.replace(
+                            target_actor_params=target_actor_params,
+                            target_critic_params=target_critic_params,
+                        )
+                    )
+                    return agent_state, actor_opt_state, actor_loss, actor_loss_dict
 
-                    return (key, agent_state, critic_opt_state), None
+                def _skip_actor(operand):
+                    agent_state, actor_opt_state = operand
+                    return agent_state, actor_opt_state, actor_loss, actor_loss_dict
 
-                key, critic_multiple_update_key = jax.random.split(key)
-
-                (_, agent_state, critic_opt_state), _ = jax.lax.scan(
-                    _sample_and_update_critic_fn,
-                    (critic_multiple_update_key, agent_state, critic_opt_state),
-                    (),
-                    length=self.config.actor_update_interval - 1,
+                agent_state, actor_opt_state, actor_loss, actor_loss_dict = (
+                    jax.lax.cond(
+                        actor_due,
+                        _update_actor,
+                        _skip_actor,
+                        (agent_state, actor_opt_state),
+                    )
+                )
+                opt_state = opt_state.replace(
+                    actor=actor_opt_state, critic=critic_opt_state
+                )
+                return (
+                    (key, agent_state, opt_state, actor_loss, actor_loss_dict),
+                    (critic_loss, critic_loss_dict),
                 )
 
-            sample_batch = self.replay_buffer.sample(replay_buffer_state, rb_key)
-
-            (critic_loss, critic_loss_dict), agent_state, critic_opt_state = (
-                critic_update_fn(
-                    critic_opt_state, agent_state, sample_batch, critic_key
-                )
-            )
-
-            (actor_loss, actor_loss_dict), agent_state, actor_opt_state = (
-                actor_update_fn(actor_opt_state, agent_state, sample_batch, actor_key)
-            )
-
-            target_actor_params = soft_target_update(
-                agent_state.params.target_actor_params,
-                agent_state.params.actor_params,
-                self.config.tau,
-            )
-            target_critic_params = soft_target_update(
-                agent_state.params.target_critic_params,
-                agent_state.params.critic_params,
-                self.config.tau,
-            )
-            agent_state = agent_state.replace(
-                params=agent_state.params.replace(
-                    target_actor_params=target_actor_params,
-                    target_critic_params=target_critic_params,
-                )
-            )
-
-            opt_state = opt_state.replace(
-                actor=actor_opt_state, critic=critic_opt_state
-            )
-
-            return (
-                (key, agent_state, opt_state),
-                (critic_loss, actor_loss, critic_loss_dict, actor_loss_dict),
-            )
-
-        (
-            (_, agent_state, opt_state),
+            initial_actor_loss = jnp.zeros(())
+            initial_actor_loss_dict = PyTreeDict(actor_loss=initial_actor_loss)
             (
-                critic_loss,
-                actor_loss,
-                critic_loss_dict,
-                actor_loss_dict,
-            ),
-        ) = scan_and_mean(
-            _sample_and_update_fn,
-            (learn_key, agent_state, state.opt_state),
-            (),
-            length=self.config.num_updates_per_iter,
-        )
+                (_, agent_state, opt_state, actor_loss, actor_loss_dict),
+                (critic_losses, critic_loss_dicts),
+            ) = jax.lax.scan(
+                _parallel_update,
+                (
+                    learn_key,
+                    agent_state,
+                    state.opt_state,
+                    initial_actor_loss,
+                    initial_actor_loss_dict,
+                ),
+                parallel_actor_mask,
+            )
+            critic_loss = critic_losses[-1]
+            critic_loss_dict = jtu.tree_map(lambda x: x[-1], critic_loss_dicts)
+        else:
+
+            def _sample_and_update_fn(carry, unused_t):
+                key, agent_state, opt_state = carry
+
+                critic_opt_state = opt_state.critic
+                actor_opt_state = opt_state.actor
+
+                key, critic_key, actor_key, rb_key = jax.random.split(key, num=4)
+
+                if self.config.actor_update_interval - 1 > 0:
+
+                    def _sample_and_update_critic_fn(carry, unused_t):
+                        key, agent_state, critic_opt_state = carry
+
+                        key, rb_key, critic_key = jax.random.split(key, num=3)
+                        # it's safe to use read-only replay_buffer_state here.
+                        sample_batch = self.replay_buffer.sample(
+                            replay_buffer_state, rb_key
+                        )
+
+                        (
+                            (critic_loss, critic_loss_dict),
+                            agent_state,
+                            critic_opt_state,
+                        ) = critic_update_fn(
+                            critic_opt_state, agent_state, sample_batch, critic_key
+                        )
+
+                        return (key, agent_state, critic_opt_state), None
+
+                    key, critic_multiple_update_key = jax.random.split(key)
+
+                    (_, agent_state, critic_opt_state), _ = jax.lax.scan(
+                        _sample_and_update_critic_fn,
+                        (critic_multiple_update_key, agent_state, critic_opt_state),
+                        (),
+                        length=self.config.actor_update_interval - 1,
+                    )
+
+                sample_batch = self.replay_buffer.sample(replay_buffer_state, rb_key)
+
+                (critic_loss, critic_loss_dict), agent_state, critic_opt_state = (
+                    critic_update_fn(
+                        critic_opt_state, agent_state, sample_batch, critic_key
+                    )
+                )
+
+                (actor_loss, actor_loss_dict), agent_state, actor_opt_state = (
+                    actor_update_fn(
+                        actor_opt_state, agent_state, sample_batch, actor_key
+                    )
+                )
+
+                target_actor_params = soft_target_update(
+                    agent_state.params.target_actor_params,
+                    agent_state.params.actor_params,
+                    self.config.tau,
+                )
+                target_critic_params = soft_target_update(
+                    agent_state.params.target_critic_params,
+                    agent_state.params.critic_params,
+                    self.config.tau,
+                )
+                agent_state = agent_state.replace(
+                    params=agent_state.params.replace(
+                        target_actor_params=target_actor_params,
+                        target_critic_params=target_critic_params,
+                    )
+                )
+
+                opt_state = opt_state.replace(
+                    actor=actor_opt_state, critic=critic_opt_state
+                )
+
+                return (
+                    (key, agent_state, opt_state),
+                    (critic_loss, actor_loss, critic_loss_dict, actor_loss_dict),
+                )
+
+            (
+                (_, agent_state, opt_state),
+                (
+                    critic_loss,
+                    actor_loss,
+                    critic_loss_dict,
+                    actor_loss_dict,
+                ),
+            ) = scan_and_mean(
+                _sample_and_update_fn,
+                (learn_key, agent_state, state.opt_state),
+                (),
+                length=self.config.num_updates_per_iter,
+            )
 
         train_metrics = TD3TrainMetric(
             actor_loss=actor_loss,
