@@ -28,6 +28,10 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
 
     env_extra_fields = ("ori_obs", "termination")
 
+    def _add_to_replay_buffer(self, replay_buffer_state, trajectory, key):
+        del key
+        return self.replay_buffer.add(replay_buffer_state, trajectory)
+
     @classmethod
     def _rescale_config(cls, config: DictConfig) -> None:
         num_devices = jax.device_count()
@@ -154,7 +158,9 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
         )
 
         agent_state = _update_obs_preprocessor(agent_state, trajectory)
-        replay_buffer_state = self.replay_buffer.add(replay_buffer_state, trajectory)
+        replay_buffer_state = self._add_to_replay_buffer(
+            replay_buffer_state, trajectory, random_rollout_key
+        )
 
         rollout_timesteps = rollout_length * config.num_envs
         sampled_timesteps = psum(
@@ -174,7 +180,9 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
         )
 
         agent_state = _update_obs_preprocessor(agent_state, trajectory)
-        replay_buffer_state = self.replay_buffer.add(replay_buffer_state, trajectory)
+        replay_buffer_state = self._add_to_replay_buffer(
+            replay_buffer_state, trajectory, rollout_key
+        )
 
         rollout_timesteps = rollout_length * config.num_envs
         sampled_timesteps = sampled_timesteps + psum(

@@ -13,19 +13,14 @@ from evorl.envs import AutoresetMode, Box, Space, create_env
 from evorl.evaluators import Evaluator
 from evorl.networks import MLP
 from evorl.replay_buffers import ReplayBuffer
+from evorl.replay_buffers.her import add_her_transitions
 from evorl.sample_batch import SampleBatch
 from evorl.types import Action, LossDict, PolicyExtraInfo, PyTreeDict, pytree_field
 from evorl.utils import running_statistics
 from evorl.utils.jax_utils import tree_get
+from evorl.utils.morl_math import scalarize
 
 from .td3 import TD3Agent, TD3NetworkParams, TD3Workflow
-
-
-def scalarize(q_values: chex.Array, preference: chex.Array) -> chex.Array:
-    """Return w^T Q while preserving any critic axis."""
-    if q_values.ndim == preference.ndim + 1:
-        preference = preference[..., None, :]
-    return jnp.sum(q_values * preference, axis=-1)
 
 
 def select_pessimistic_q_vector(
@@ -364,4 +359,15 @@ class MOTD3Workflow(TD3Workflow):
                     ),
                 ),
             )
+        )
+
+    def _add_to_replay_buffer(self, replay_buffer_state, trajectory, key):
+        return add_her_transitions(
+            self.replay_buffer,
+            replay_buffer_state,
+            trajectory,
+            jax.random.fold_in(key, 0x484552),
+            self.config.num_relabel_preferences,
+            self.config.learning_start_timesteps,
+            self.config.process_count,
         )

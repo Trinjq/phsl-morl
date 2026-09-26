@@ -389,8 +389,8 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
                 )
             )
 
-        replay_buffer_state = self.replay_buffer.add(
-            state.replay_buffer_state, trajectory
+        replay_buffer_state = self._add_to_replay_buffer(
+            state.replay_buffer_state, trajectory, rollout_key
         )
 
         def critic_loss_fn(agent_state, sample_batch, key):

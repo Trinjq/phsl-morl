@@ -20,6 +20,7 @@ replay_buffer_capacity: 2000000
 
 reward_size: 2
 process_count: 10
+num_relabel_preferences: 3
 tau: 0.005
 exploration_epsilon: 0.1
 policy_noise: 0.2
