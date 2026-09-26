@@ -1,6 +1,7 @@
 # @package _global_
 
 workflow_cls: evorl.algorithms.mo_td3.MOTD3Workflow
+matmul_precision: highest
 
 num_envs: 10
 normalize_obs: false
@@ -29,6 +30,8 @@ exploration_epsilon: 0.1
 policy_noise: 0.2
 clip_policy_noise: 0.5
 actor_update_interval: 10
+actor_loss_coeff: 10
+interpolator_artifact: interp_objs_walker2d.txt
 num_updates_per_iter: 1
 
 optimizer:

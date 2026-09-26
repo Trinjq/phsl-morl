@@ -1,0 +1,27 @@
+{
+  "device": "NVIDIA GeForce RTX 4090",
+  "backend": "gpu",
+  "jax_version": "0.10.2",
+  "frozen_tolerances_modified": false,
+  "default_precision": {
+    "classification": "JAX backend default behavior",
+    "status": "FAIL",
+    "result": "11 failed, 16 passed",
+    "float64_core": "PASS",
+    "float32_max_abs_error": {
+      "actor_output": 0.00027043,
+      "critic_q1": 0.00013825,
+      "directional_angle_q1": 0.0167923,
+      "critic_raw_gradient": 0.01494026,
+      "actor_raw_gradient": 0.01943588
+    }
+  },
+  "highest_precision": {
+    "classification": "PD-MORL reproduction precision policy",
+    "status": "PASS",
+    "result": "28 passed",
+    "float32_core": "PASS",
+    "jit": "PASS",
+    "vmap": "PASS"
+  }
+}

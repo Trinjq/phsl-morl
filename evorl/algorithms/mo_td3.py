@@ -5,6 +5,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import jax.tree_util as jtu
+import numpy as np
 import optax
 from omegaconf import DictConfig
 
@@ -25,7 +26,13 @@ from evorl.types import (
 )
 from evorl.utils import running_statistics
 from evorl.utils.jax_utils import tree_get
-from evorl.utils.morl_math import scalarize
+from evorl.utils.morl_math import directional_angle, scalarize
+from evorl.utils.pd_morl_interpolator import (
+    PDMORLInterpolatorState,
+    fit_interpolator_state,
+    interpolate,
+    key_preferences,
+)
 
 from .td3 import TD3Agent, TD3NetworkParams, TD3Workflow
 
@@ -35,9 +42,9 @@ def select_pessimistic_q_vector(
 ) -> chex.Array:
     """Select one complete critic vector using its scalarized value."""
     critic_index = jnp.argmin(scalarize(twin_q_values, preference), axis=-1)
-    return jnp.take_along_axis(
-        twin_q_values, critic_index[..., None, None], axis=-2
-    )[..., 0, :]
+    return jnp.take_along_axis(twin_q_values, critic_index[..., None, None], axis=-2)[
+        ..., 0, :
+    ]
 
 
 def vector_bellman_target(
@@ -55,6 +62,30 @@ def twin_smooth_l1_loss(
     """Sum the mean Smooth-L1 loss of both critics."""
     losses = optax.huber_loss(twin_q_values, target_q_values[..., None, :])
     return losses.mean(axis=(0, 2)).sum()
+
+
+def pd_morl_critic_loss(
+    twin_q_values: chex.Array,
+    target_q_values: chex.Array,
+    projected_preference: chex.Array,
+) -> chex.Array:
+    """Official two Smooth-L1 means plus two unweighted angle means."""
+    angles = directional_angle(projected_preference[..., None, :], twin_q_values)
+    return (
+        twin_smooth_l1_loss(twin_q_values, target_q_values) + angles.mean(axis=0).sum()
+    )
+
+
+def pd_morl_actor_loss(
+    q_values: chex.Array,
+    preference: chex.Array,
+    projected_preference: chex.Array,
+    actor_loss_coeff: float,
+) -> chex.Array:
+    """Official scalar Q objective plus weighted directional-angle mean."""
+    return -scalarize(q_values, preference).mean() + actor_loss_coeff * (
+        directional_angle(projected_preference, q_values).mean()
+    )
 
 
 def add_target_policy_smoothing(
@@ -139,6 +170,8 @@ class MOTD3Agent(TD3Agent):
     reward_size: int = pytree_field(default=2, static=True)
     process_count: int = pytree_field(default=1, static=True)
     start_timesteps: int = pytree_field(default=10000, static=True)
+    actor_loss_coeff: float = pytree_field(default=10.0, static=True)
+    interpolator_state: PDMORLInterpolatorState | None = None
     action_low: chex.Array | None = None
     action_high: chex.Array | None = None
 
@@ -153,9 +186,7 @@ class MOTD3Agent(TD3Agent):
         critic_params = self.critic_network.init(
             critic_key, dummy_obs, dummy_preference, dummy_action
         )
-        actor_params = self.actor_network.init(
-            actor_key, dummy_obs, dummy_preference
-        )
+        actor_params = self.actor_network.init(actor_key, dummy_obs, dummy_preference)
         params_state = TD3NetworkParams(
             critic_params=critic_params,
             actor_params=actor_params,
@@ -172,13 +203,22 @@ class MOTD3Agent(TD3Agent):
             params=params_state,
             obs_preprocessor_state=obs_preprocessor_state,
             extra_state=PyTreeDict(
-                worker_steps=jnp.zeros((self.process_count,), dtype=jnp.uint32)
+                worker_steps=jnp.zeros((self.process_count,), dtype=jnp.uint32),
+                interpolator=self.interpolator_state,
             ),
         )
 
     @staticmethod
     def _preference(sample_batch: SampleBatch) -> chex.Array:
         return sample_batch.extras.policy_extras.preference
+
+    @staticmethod
+    def _project_preference(
+        agent_state: AgentState, preference: chex.Array
+    ) -> chex.Array:
+        if agent_state.extra_state.interpolator is None:
+            raise ValueError("PD-MORL losses require an interpolator state")
+        return interpolate(agent_state.extra_state.interpolator, preference)
 
     def compute_actions(
         self, agent_state: AgentState, sample_batch: SampleBatch, key: chex.PRNGKey
@@ -196,9 +236,7 @@ class MOTD3Agent(TD3Agent):
             jax.random.normal(noise_key, policy_actions.shape)
             * self.exploration_epsilon
         )
-        policy_actions = jnp.clip(
-            policy_actions, self.action_low, self.action_high
-        )
+        policy_actions = jnp.clip(policy_actions, self.action_low, self.action_high)
         random_actions = jax.random.uniform(
             random_key,
             policy_actions.shape,
@@ -252,9 +290,7 @@ class MOTD3Agent(TD3Agent):
                 next_obs, agent_state.obs_preprocessor_state
             )
 
-        next_actions = self.target_actions(
-            agent_state, next_obs, preference, key
-        )
+        next_actions = self.target_actions(agent_state, next_obs, preference, key)
         next_twin_q = self.critic_network.apply(
             agent_state.params.target_critic_params,
             next_obs,
@@ -275,11 +311,15 @@ class MOTD3Agent(TD3Agent):
             preference,
             sample_batch.actions,
         )
-        critic_loss = twin_smooth_l1_loss(q_values, q_target)
+        projected_preference = self._project_preference(agent_state, preference)
+        critic_loss = pd_morl_critic_loss(q_values, q_target, projected_preference)
         return PyTreeDict(
             critic_loss=critic_loss,
             q_value=scalarize(q_values, preference).mean(),
             q_target=q_target,
+            critic_angle=directional_angle(
+                projected_preference[..., None, :], q_values
+            ).mean(axis=0),
         )
 
     def actor_loss(
@@ -297,7 +337,11 @@ class MOTD3Agent(TD3Agent):
         q_values = self.critic_network.apply(
             agent_state.params.critic_params, obs, preference, actions
         )
-        actor_loss = -scalarize(q_values[..., 0, :], preference).mean()
+        q1 = q_values[..., 0, :]
+        projected_preference = self._project_preference(agent_state, preference)
+        actor_loss = pd_morl_actor_loss(
+            q1, preference, projected_preference, self.actor_loss_coeff
+        )
         return PyTreeDict(actor_loss=actor_loss)
 
 
@@ -313,6 +357,8 @@ def make_mo_td3_agent(
     normalize_obs: bool = False,
     process_count: int = 1,
     start_timesteps: int = 10000,
+    actor_loss_coeff: float = 10.0,
+    interpolator_state: PDMORLInterpolatorState | None = None,
 ) -> MOTD3Agent:
     assert isinstance(action_space, Box), "Only continuous action spaces are supported."
     max_action = float(jnp.max(action_space.high))
@@ -332,6 +378,8 @@ def make_mo_td3_agent(
         reward_size=reward_size,
         process_count=process_count,
         start_timesteps=start_timesteps,
+        actor_loss_coeff=actor_loss_coeff,
+        interpolator_state=interpolator_state,
         action_low=action_space.low,
         action_high=action_space.high,
         discount=discount,
@@ -351,14 +399,19 @@ class MOTD3Workflow(TD3Workflow):
 
     @classmethod
     def _build_from_config(cls, config: DictConfig):
-        env_kwargs = dict(
-            episode_length=config.env.max_episode_steps,
-            autoreset_mode=AutoresetMode.NORMAL,
-            record_ori_obs=True,
-            vector_reward=True,
-            episode_preference=True,
-            process_count=config.process_count,
+        jax.config.update("jax_default_matmul_precision", config.matmul_precision)
+        key_solutions = np.loadtxt(config.interpolator_artifact, delimiter=",")
+        interpolator_state = fit_interpolator_state(
+            key_preferences(config.reward_size), key_solutions, "initial"
         )
+        env_kwargs = {
+            "episode_length": config.env.max_episode_steps,
+            "autoreset_mode": AutoresetMode.NORMAL,
+            "record_ori_obs": True,
+            "vector_reward": True,
+            "episode_preference": True,
+            "process_count": config.process_count,
+        }
         env = create_env(config.env, parallel=config.num_envs, **env_kwargs)
         agent = make_mo_td3_agent(
             action_space=env.action_space,
@@ -372,6 +425,8 @@ class MOTD3Workflow(TD3Workflow):
             normalize_obs=config.normalize_obs,
             process_count=config.process_count,
             start_timesteps=config.start_timesteps,
+            actor_loss_coeff=config.actor_loss_coeff,
+            interpolator_state=interpolator_state,
         )
         optimizer = optax.chain(
             optax.clip_by_global_norm(config.optimizer.grad_clip_norm),

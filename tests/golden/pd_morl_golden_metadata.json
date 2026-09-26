@@ -1,0 +1,25 @@
+{
+  "fixture": "TEST FIXTURE; not an official Walker result",
+  "pd_morl_commit": "35aa1bccb31c149c3f3bb895c7c6ffa674e4b461",
+  "evorl_commit_at_export": "c1a1432340d71425a372ebef18afcd3eb5390d5e",
+  "python": "3.13.11",
+  "pytorch": "2.11.0+cpu",
+  "scipy": "1.18.1",
+  "numpy": "2.5.3",
+  "jax": "0.11.2",
+  "jax_gpu_matmul_precision_policy": "highest",
+  "dtypes": [
+    "float64",
+    "float32"
+  ],
+  "walker_dimensions": {
+    "obs": 17,
+    "action": 6,
+    "objective": 2
+  },
+  "batch_size": 4,
+  "actor_loss_coeff": 10.0,
+  "gamma": 0.995,
+  "policy_freq": 10,
+  "seed": 20260306
+}

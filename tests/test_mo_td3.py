@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 import jax.tree_util as jtu
 import optax
-
 from evorl.algorithms.mo_td3 import (
     add_target_policy_smoothing,
     make_mo_td3_agent,
@@ -18,14 +17,20 @@ from evorl.replay_buffers import ReplayBuffer
 from evorl.rollout import rollout
 from evorl.sample_batch import SampleBatch
 from evorl.types import PyTreeDict
+from evorl.utils.pd_morl_interpolator import fit_interpolator_state
 from evorl.utils.rl_toolkits import (
     flatten_rollout_trajectory,
     soft_target_update,
 )
 
-
 OBS_SPACE = Box(low=-jnp.ones(17), high=jnp.ones(17))
 ACTION_SPACE = Box(low=-jnp.ones(6), high=jnp.ones(6))
+# Deterministic test fixture; these are not official Walker key solutions.
+INTERPOLATOR_STATE = fit_interpolator_state(
+    [[0.0, 1.0], [0.5, 0.5], [1.0, 0.0]],
+    [[120.0, 900.0], [550.0, 620.0], [980.0, 140.0]],
+    "initial",
+)
 
 
 def _batch(batch_size=4):
@@ -53,7 +58,9 @@ def _tree_changed(before, after):
 
 
 def test_mo_actor_critic_shapes_architecture_and_independence():
-    agent = make_mo_td3_agent(ACTION_SPACE)
+    agent = make_mo_td3_agent(
+        ACTION_SPACE, interpolator_state=INTERPOLATOR_STATE
+    )
     state = agent.init(OBS_SPACE, ACTION_SPACE, jax.random.PRNGKey(0))
     batch = _batch()
     preference = batch.extras.policy_extras.preference
@@ -120,7 +127,9 @@ def test_vector_target_done_mask_smoothing_and_losses_jit():
     assert smoothed.shape == (8, 6)
     assert jnp.all(smoothed >= -1) and jnp.all(smoothed <= 1)
 
-    agent = make_mo_td3_agent(ACTION_SPACE)
+    agent = make_mo_td3_agent(
+        ACTION_SPACE, interpolator_state=INTERPOLATOR_STATE
+    )
     state = agent.init(OBS_SPACE, ACTION_SPACE, jax.random.PRNGKey(2))
     batch = _batch(2)
     batch = batch.replace(
@@ -163,7 +172,9 @@ def test_real_walker_replay_and_delayed_updates_on_gpu():
         process_count=10,
         record_ori_obs=True,
     )
-    agent = make_mo_td3_agent(env.action_space)
+    agent = make_mo_td3_agent(
+        env.action_space, interpolator_state=INTERPOLATOR_STATE
+    )
     agent_state = agent.init(env.obs_space, env.action_space, jax.random.PRNGKey(6))
     env_state = env.reset(jax.random.PRNGKey(7))
     trajectory, _ = jax.jit(
