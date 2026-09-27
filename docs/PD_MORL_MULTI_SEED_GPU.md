@@ -65,6 +65,10 @@ inside each child JAX reported only logical `cuda:0`, as expected after
 K=10, batch 256, and only shortened the duration. It did not start a
 data-parallel learner or a formal 1M-step run.
 
+A two-process same-seed initialization smoke (`seed=7` on GPUs 0 and 1)
+produced the identical initialization fingerprint
+`82a6d54885...ca163b` in both isolated run directories.
+
 SOURCE-FAITHFUL: the algorithm, K=10, batch 256, replay/HER, losses, control,
 evaluation, checkpoint semantics, and single-GPU training behavior.
 
