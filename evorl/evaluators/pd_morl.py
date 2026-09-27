@@ -17,6 +17,7 @@ from evorl.types import PyTreeDict
 from evorl.utils.pd_morl_interpolator import (
     PDMORLInterpolatorState,
     fit_interpolator_state,
+    key_preferences,
 )
 
 
@@ -259,4 +260,22 @@ class PDMORLEvaluator:
             ),
             preferences,
             repeats,
+        )
+
+
+class KeyInterpolatorUpdateController:
+    """Source-faithful host controller for key evaluation and online refit."""
+
+    def __init__(self, objective_size: int, repeats: int = 3):
+        if objective_size != 2:
+            raise ValueError("the frozen PD-MORL baseline requires two objectives")
+        self.keys = key_preferences(objective_size)
+        self.repeats = repeats
+
+    def update(self, evaluator, agent_state, raw_key_solutions):
+        result = evaluator.evaluate(agent_state, self.keys, repeats=self.repeats)
+        return update_key_solutions(
+            np.asarray(jax.device_get(raw_key_solutions)),
+            result.returns_per_repeat,
+            self.keys,
         )

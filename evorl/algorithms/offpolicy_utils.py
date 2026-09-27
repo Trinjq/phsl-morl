@@ -122,9 +122,6 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
                 env_extra_fields=self.env_extra_fields,
             )
 
-            # [T, B, ...] -> [T*B, ...]
-            trajectory = clean_trajectory(trajectory)
-            trajectory = flatten_rollout_trajectory(trajectory)
             trajectory = tree_stop_gradient(trajectory)
 
             return trajectory
@@ -160,6 +157,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
         )
 
         agent_state = self._on_prefill_trajectory(agent_state, trajectory)
+        trajectory = flatten_rollout_trajectory(clean_trajectory(trajectory))
         agent_state = _update_obs_preprocessor(agent_state, trajectory)
         replay_buffer_state = self._add_to_replay_buffer(
             replay_buffer_state, trajectory, random_rollout_key
@@ -183,6 +181,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
         )
 
         agent_state = self._on_prefill_trajectory(agent_state, trajectory)
+        trajectory = flatten_rollout_trajectory(clean_trajectory(trajectory))
         agent_state = _update_obs_preprocessor(agent_state, trajectory)
         replay_buffer_state = self._add_to_replay_buffer(
             replay_buffer_state, trajectory, rollout_key
@@ -230,6 +229,9 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
     def _after_learning(self, state):
         return state
 
+    def _record_train_metrics(self, train_metrics):
+        return train_metrics.to_local_dict()
+
     def learn(self, state: State) -> State:
         num_devices = jax.device_count()
         one_step_timesteps = self.config.rollout_length * self.config.num_envs
@@ -248,7 +250,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
 
             # current iteration
             iterations = state.metrics.iterations.tolist()
-            self.recorder.write(train_metrics.to_local_dict(), iterations)
+            self.recorder.write(self._record_train_metrics(train_metrics), iterations)
             self.recorder.write(workflow_metrics.to_local_dict(), iterations)
             if control_metrics:
                 self.recorder.write(control_metrics, iterations)

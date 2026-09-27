@@ -27,6 +27,7 @@ def gradient_update(
     optimizer: optax.GradientTransformation,
     dp_axis_name: str | None,
     has_aux: bool = False,
+    grad_norm_key: str | None = None,
 ):
     """Wrapper of the loss function that apply gradient updates.
 
@@ -47,6 +48,9 @@ def gradient_update(
 
     def f(opt_state, params, *args, **kwargs):
         value, grads = loss_and_pgrad_fn(params, *args, **kwargs)
+        if grad_norm_key is not None:
+            loss, aux = value
+            value = loss, aux.replace(**{grad_norm_key: optax.tree.norm(grads)})
         params_update, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, params_update)
         return (
@@ -71,6 +75,7 @@ def agent_gradient_update(
     optimizer: optax.GradientTransformation,
     dp_axis_name: str | None = None,
     has_aux: bool = False,
+    grad_norm_key: str | None = None,
     attach_fn: Callable[
         [chex.ArrayTree, chex.ArrayTree], chex.ArrayTree
     ] = _attach_params_to_agent_state,
@@ -83,7 +88,11 @@ def agent_gradient_update(
         return loss_fn(agent_state, sample_batch, key)
 
     _gradient_update_fn = gradient_update(
-        _loss_fn, optimizer, dp_axis_name=dp_axis_name, has_aux=has_aux
+        _loss_fn,
+        optimizer,
+        dp_axis_name=dp_axis_name,
+        has_aux=has_aux,
+        grad_norm_key=grad_norm_key,
     )
 
     def f(opt_state, agent_state, *args, **kwargs):

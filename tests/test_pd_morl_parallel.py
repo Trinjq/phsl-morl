@@ -150,7 +150,7 @@ def test_official_learner_start_boundary():
     threshold = 2 * config.batch_size * config.num_relabel_preferences
     replay = ReplayBuffer(
         capacity=threshold,
-        min_sample_timesteps=config.learner_start_replay_entries,
+        min_sample_timesteps=config.learner_start_threshold,
         sample_batch_size=config.batch_size,
     )
     transitions, _ = _collect(_env_state(4), 4)
@@ -158,7 +158,7 @@ def test_official_learner_start_boundary():
 
     assert threshold == 1536
     assert config.learning_start_timesteps == 1530
-    assert config.start_timesteps == 10000
+    assert config.random_action_warmup == 10000
     assert config.her_start_timesteps == 10000
     assert not replay.can_sample(
         replay_state.replace(buffer_size=jnp.array(threshold - 1))

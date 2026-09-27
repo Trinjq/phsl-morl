@@ -4,6 +4,8 @@ import jax.numpy as jnp
 import jax.tree_util as jtu
 from brax.envs import (
     Env as BraxEnv,
+)
+from brax.envs import (
     get_environment,
 )
 
@@ -12,6 +14,10 @@ from evorl.types import Action, PyTreeDict
 from .env import Env, EnvAdapter, EnvState
 from .space import Box, Space, SpaceContainer
 from .utils import sort_dict
+from .wrappers.preference_wrapper import (
+    EpisodePreferenceWrapper,
+    make_logical_worker_ids,
+)
 from .wrappers.training_wrapper import (
     AutoresetMode,
     EpisodeWrapper,
@@ -20,10 +26,6 @@ from .wrappers.training_wrapper import (
     VmapAutoResetWrapper,
     VmapEnvPoolAutoResetWrapper,
     VmapWrapper,
-)
-from .wrappers.preference_wrapper import (
-    EpisodePreferenceWrapper,
-    make_logical_worker_ids,
 )
 
 
@@ -85,8 +87,9 @@ class BraxAdapter(EnvAdapter):
                 spaces=jtu.tree_map(
                     get_space,
                     obs_spec,
-                    is_leaf=lambda obj: isinstance(obj, tuple)
-                    and all(isinstance(x, int) for x in obj),
+                    is_leaf=lambda obj: (
+                        isinstance(obj, tuple) and all(isinstance(x, int) for x in obj)
+                    ),
                 )
             )
 
@@ -145,6 +148,7 @@ def create_wrapped_brax_env(
     vector_reward: bool = False,
     episode_preference: bool = False,
     process_count: int = 10,
+    logical_worker_ids: chex.Array | None = None,
     **kwargs,
 ) -> Env:
     """Create wrapped Brax environment for training.
@@ -165,9 +169,15 @@ def create_wrapped_brax_env(
         Wrapped Brax env.
 
     """
-    logical_worker_ids = None
     if episode_preference:
-        logical_worker_ids = make_logical_worker_ids(parallel, process_count)
+        if logical_worker_ids is None:
+            logical_worker_ids = make_logical_worker_ids(parallel, process_count)
+        else:
+            logical_worker_ids = jnp.asarray(logical_worker_ids, dtype=jnp.int32)
+            if logical_worker_ids.shape != (parallel,):
+                raise ValueError(
+                    "logical_worker_ids must match the physical environment batch"
+                )
 
     env = create_brax_env(env_name, vector_reward=vector_reward, **kwargs)
 

@@ -11,6 +11,14 @@ from .comm import (
 )
 from .gradients import agent_gradient_update, gradient_update
 from .sharding import shmap_vmap, shmap_map, tree_device_put
+from .pd_morl import (
+    PDMORLDeviceLayout,
+    logical_worker_keys,
+    make_distributed_gradient_step,
+    masked_mean,
+    pad_batch,
+    replica_max_diff,
+)
 
 DP_AXIS_NAME = "DP"
 
@@ -32,6 +40,12 @@ __all__ = [
     "shmap_vmap",
     "shmap_map",
     "tree_device_put",
+    "PDMORLDeviceLayout",
+    "logical_worker_keys",
+    "make_distributed_gradient_step",
+    "masked_mean",
+    "pad_batch",
+    "replica_max_diff",
     "DP_AXIS_NAME",
     "POP_AXIS_NAME",
 ]

@@ -1,7 +1,7 @@
 from .evaluator import Evaluator
 from .episode_collector import EpisodeCollector
 from .mo_brax_evaluator import BraxEvaluator
-from .pd_morl import PDMORLEvaluator
+from .pd_morl import KeyInterpolatorUpdateController, PDMORLEvaluator
 from .ec_evaluator import EpisodeObsCollector
 
 __all__ = [
@@ -9,4 +9,6 @@ __all__ = [
     "EpisodeCollector",
     "BraxEvaluator",
     "EpisodeObsCollector",
+    "PDMORLEvaluator",
+    "KeyInterpolatorUpdateController",
 ]

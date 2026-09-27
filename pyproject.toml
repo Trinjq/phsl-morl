@@ -34,6 +34,12 @@ convention = "google"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "gpu: requires a CUDA GPU",
+    "multi_gpu: requires multiple CUDA GPUs",
+    "integration: exercises connected workflow components",
+    "slow: long-running smoke test",
+]
 
 [project]
 name = "evorl"

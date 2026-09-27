@@ -65,6 +65,7 @@ class TD3Agent(Agent):
     policy_noise: float = 0.2
     clip_policy_noise: float = 0.5
     critics_in_actor_loss: str = "first"  #  or "min"
+    record_grad_norms: bool = pytree_field(default=False, static=True)
 
     @property
     def normalize_obs(self):
@@ -414,6 +415,9 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
             self.optimizer,
             dp_axis_name=self.dp_axis_name,
             has_aux=True,
+            grad_norm_key=(
+                "critic_grad_norm" if self.agent.record_grad_norms else None
+            ),
             attach_fn=lambda agent_state, critic_params: agent_state.replace(
                 params=agent_state.params.replace(critic_params=critic_params)
             ),
@@ -425,6 +429,9 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
             self.optimizer,
             dp_axis_name=self.dp_axis_name,
             has_aux=True,
+            grad_norm_key=(
+                "actor_grad_norm" if self.agent.record_grad_norms else None
+            ),
             attach_fn=lambda agent_state, actor_params: agent_state.replace(
                 params=agent_state.params.replace(actor_params=actor_params)
             ),
@@ -493,6 +500,13 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
 
             initial_actor_loss = jnp.zeros(())
             initial_actor_loss_dict = PyTreeDict(actor_loss=initial_actor_loss)
+            if self.agent.record_grad_norms:
+                initial_actor_loss_dict.update(
+                    actor_total_loss=initial_actor_loss,
+                    actor_scalarized_term=initial_actor_loss,
+                    actor_angle_term=initial_actor_loss,
+                    actor_grad_norm=initial_actor_loss,
+                )
             (
                 (_, agent_state, opt_state, actor_loss, actor_loss_dict),
                 (critic_losses, critic_loss_dicts),

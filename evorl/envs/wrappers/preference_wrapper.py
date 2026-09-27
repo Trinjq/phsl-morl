@@ -20,9 +20,7 @@ def _preference_subspace_bounds(
     if not isinstance(process_count, int) or isinstance(process_count, bool):
         raise ValueError("process_count must be an integer")
     if not 1 <= process_count <= PREFERENCE_GRID_SIZE:
-        raise ValueError(
-            f"process_count must be between 1 and {PREFERENCE_GRID_SIZE}"
-        )
+        raise ValueError(f"process_count must be between 1 and {PREFERENCE_GRID_SIZE}")
 
     size, remainder = divmod(PREFERENCE_GRID_SIZE, process_count)
     sizes = tuple(size + (worker_id < remainder) for worker_id in range(process_count))
@@ -33,9 +31,7 @@ def _preference_subspace_bounds(
     return starts, sizes
 
 
-def make_logical_worker_ids(
-    env_batch_size: int, process_count: int = 10
-) -> chex.Array:
+def make_logical_worker_ids(env_batch_size: int, process_count: int = 10) -> chex.Array:
     """Map equally replicated environment lanes onto logical workers."""
     _preference_subspace_bounds(process_count)
     if env_batch_size % process_count != 0:
@@ -46,9 +42,7 @@ def make_logical_worker_ids(
     return jnp.arange(env_batch_size, dtype=jnp.int32) % process_count
 
 
-def sample_preference(
-    key: chex.PRNGKey, batch_shape: Sequence[int] = ()
-) -> chex.Array:
+def sample_preference(key: chex.PRNGKey, batch_shape: Sequence[int] = ()) -> chex.Array:
     """Sample continuously from the simplex for tests only."""
     first = jax.random.uniform(key, shape=tuple(batch_shape))
     return jnp.stack((first, 1.0 - first), axis=-1)
@@ -66,10 +60,7 @@ def official_preference_subspaces(
     """Split the official grid like np.array_split(grid, process_count)."""
     grid = official_preference_grid()
     starts, sizes = _preference_subspace_bounds(process_count)
-    return tuple(
-        grid[start : start + size]
-        for start, size in zip(starts, sizes)
-    )
+    return tuple(grid[start : start + size] for start, size in zip(starts, sizes))
 
 
 def sample_official_preference(
@@ -110,16 +101,18 @@ class EpisodePreferenceWrapper(Wrapper):
 
         keys = jax.random.split(preference_key, state.done.shape[0])
         keys, sample_keys = rng_split(keys)
+        safe_worker_ids = jnp.maximum(self.logical_worker_ids, 0)
         preferences = jax.vmap(
             lambda sample_key, worker_id: sample_official_preference(
                 sample_key, worker_id, self.process_count
             )
-        )(
-            sample_keys, self.logical_worker_ids
-        )
+        )(sample_keys, safe_worker_ids)
 
         return state.replace(
-            info=state.info.replace(preference=preferences),
+            info=state.info.replace(
+                preference=preferences,
+                logical_worker_id=self.logical_worker_ids,
+            ),
             _internal=state._internal.replace(preference_key=keys),
         )
 
@@ -129,13 +122,12 @@ class EpisodePreferenceWrapper(Wrapper):
 
         old_keys = state._internal.preference_key
         next_keys, sample_keys = rng_split(old_keys)
+        safe_worker_ids = jnp.maximum(self.logical_worker_ids, 0)
         candidates = jax.vmap(
             lambda sample_key, worker_id: sample_official_preference(
                 sample_key, worker_id, self.process_count
             )
-        )(
-            sample_keys, self.logical_worker_ids
-        )
+        )(sample_keys, safe_worker_ids)
         done = state.done[..., None].astype(jnp.bool_)
 
         return state.replace(

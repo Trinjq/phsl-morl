@@ -8,7 +8,9 @@ from evorl.algorithms.mo_td3 import (
     make_mo_td3_agent,
     parallel_actor_update_mask,
     pd_morl_actor_loss,
+    pd_morl_actor_loss_contribution,
     pd_morl_critic_loss,
+    pd_morl_critic_loss_contribution,
 )
 from evorl.distributed.gradients import agent_gradient_update
 from evorl.envs import Box
@@ -111,6 +113,35 @@ def test_actor_loss_sign_roles_and_coefficient_from_config():
     assert config.actor_loss_coeff == 10
     assert jnp.allclose(loss_10, scalar_term + 10 * angle_mean)
     assert jnp.allclose(loss_10 - loss_3, 7 * angle_mean)
+
+
+def test_distributed_loss_contributions_equal_global_means_and_ignore_padding():
+    w = jnp.array([[0.2, 0.8], [0.7, 0.3]])
+    wp = jnp.array([[0.4, 0.6], [0.8, 0.2]])
+    q1 = jnp.array([[1.5, 0.5], [0.3, 1.7]])
+    twin_q = jnp.stack((q1, q1 + 0.2), axis=1)
+    target = jnp.array([[0.6, 0.9], [0.7, 0.8]])
+    mask = jnp.ones(2, dtype=jnp.bool_)
+
+    critic, _ = pd_morl_critic_loss_contribution(twin_q, target, wp, mask, 2)
+    actor, _ = pd_morl_actor_loss_contribution(q1, w, wp, 10.0, mask, 2)
+    assert jnp.allclose(critic, pd_morl_critic_loss(twin_q, target, wp))
+    assert jnp.allclose(actor, pd_morl_actor_loss(q1, w, wp, 10.0))
+
+    padded_mask = jnp.array([True, True, False])
+    padded_q1 = jnp.concatenate((q1, jnp.full((1, 2), 1e6)))
+    padded_twin = jnp.concatenate((twin_q, jnp.full((1, 2, 2), -1e6)))
+    padded_target = jnp.concatenate((target, jnp.full((1, 2), 1e6)))
+    padded_w = jnp.concatenate((w, w[:1]))
+    padded_wp = jnp.concatenate((wp, wp[:1]))
+    padded_critic, _ = pd_morl_critic_loss_contribution(
+        padded_twin, padded_target, padded_wp, padded_mask, 2
+    )
+    padded_actor, _ = pd_morl_actor_loss_contribution(
+        padded_q1, padded_w, padded_wp, 10.0, padded_mask, 2
+    )
+    assert jnp.allclose(padded_critic, critic)
+    assert jnp.allclose(padded_actor, actor)
 
 
 def test_alignment_gradients_finite_at_source_boundaries():

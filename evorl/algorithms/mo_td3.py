@@ -14,11 +14,11 @@ from evorl.agent import AgentState
 from evorl.envs import AutoresetMode, Box, Space, create_env
 from evorl.evaluators import Evaluator, PDMORLEvaluator
 from evorl.evaluators.pd_morl import (
+    KeyInterpolatorUpdateController,
     full_evaluation_due,
     key_update_due,
     load_key_solution_artifact,
     preference_grid,
-    update_key_solutions,
 )
 from evorl.networks import MLP
 from evorl.replay_buffers import ReplayBuffer
@@ -84,6 +84,29 @@ def pd_morl_critic_loss(
     )
 
 
+def pd_morl_critic_loss_contribution(
+    twin_q_values: chex.Array,
+    target_q_values: chex.Array,
+    projected_preference: chex.Array,
+    valid_mask: chex.Array,
+    global_batch_size: int,
+) -> tuple[chex.Array, PyTreeDict]:
+    """Additive masked critic loss contribution for a distributed shard."""
+    row_mask = valid_mask.astype(twin_q_values.dtype)
+    smooth = optax.huber_loss(twin_q_values, target_q_values[..., None, :])
+    smooth = (smooth * row_mask[:, None, None]).sum(axis=(0, 2)) / (
+        global_batch_size * twin_q_values.shape[-1]
+    )
+    angles = directional_angle(projected_preference[..., None, :], twin_q_values)
+    angles = (angles * row_mask[:, None]).sum(axis=0) / global_batch_size
+    return smooth.sum() + angles.sum(), PyTreeDict(
+        critic_smooth_l1_q1=smooth[0],
+        critic_smooth_l1_q2=smooth[1],
+        critic_angle_q1=angles[0],
+        critic_angle_q2=angles[1],
+    )
+
+
 def pd_morl_actor_loss(
     q_values: chex.Array,
     preference: chex.Array,
@@ -93,6 +116,26 @@ def pd_morl_actor_loss(
     """Official scalar Q objective plus weighted directional-angle mean."""
     return -scalarize(q_values, preference).mean() + actor_loss_coeff * (
         directional_angle(projected_preference, q_values).mean()
+    )
+
+
+def pd_morl_actor_loss_contribution(
+    q_values: chex.Array,
+    preference: chex.Array,
+    projected_preference: chex.Array,
+    actor_loss_coeff: float,
+    valid_mask: chex.Array,
+    global_batch_size: int,
+) -> tuple[chex.Array, PyTreeDict]:
+    """Additive masked actor loss contribution for a distributed shard."""
+    row_mask = valid_mask.astype(q_values.dtype)
+    scalarized = -(scalarize(q_values, preference) * row_mask).sum() / global_batch_size
+    angle = (
+        directional_angle(projected_preference, q_values) * row_mask
+    ).sum() / global_batch_size
+    return scalarized + actor_loss_coeff * angle, PyTreeDict(
+        actor_scalarized_term=scalarized,
+        actor_angle_term=angle,
     )
 
 
@@ -182,7 +225,7 @@ class TwinVectorCritic(nn.Module):
         return jnp.stack(q_values, axis=-2)
 
 
-class MOTD3Agent(TD3Agent):
+class PDMORLAgent(TD3Agent):
     """Preference-conditioned vector-Q extension of EvoRL TD3."""
 
     obs_preprocessor: Any = pytree_field(default=None, static=True)
@@ -227,6 +270,9 @@ class MOTD3Agent(TD3Agent):
                 episode_count=jnp.zeros((self.process_count,), dtype=jnp.uint32),
                 eval_cnt_ep=jnp.uint32(1),
                 eval_cnt=jnp.uint32(1),
+                total_it=jnp.uint32(0),
+                key_update_count=jnp.uint32(0),
+                interpolator_refit_count=jnp.uint32(0),
                 raw_key_solutions=self.initial_key_solutions,
                 interpolator=self.interpolator_state,
             ),
@@ -337,13 +383,30 @@ class MOTD3Agent(TD3Agent):
         )
         projected_preference = self._project_preference(agent_state, preference)
         critic_loss = pd_morl_critic_loss(q_values, q_target, projected_preference)
+        smooth = optax.huber_loss(q_values, q_target[..., None, :]).mean(
+            axis=(0, 2)
+        )
+        angles = directional_angle(
+            projected_preference[..., None, :], q_values
+        ).mean(axis=0)
         return PyTreeDict(
             critic_loss=critic_loss,
+            critic_total_loss=critic_loss,
+            critic_smooth_l1_q1=smooth[0],
+            critic_smooth_l1_q2=smooth[1],
+            critic_angle_q1=angles[0],
+            critic_angle_q2=angles[1],
             q_value=scalarize(q_values, preference).mean(),
             q_target=q_target,
-            critic_angle=directional_angle(
-                projected_preference[..., None, :], q_values
-            ).mean(axis=0),
+            q1_mean=q_values[..., 0, :].mean(),
+            q1_min=q_values[..., 0, :].min(),
+            q1_max=q_values[..., 0, :].max(),
+            q2_mean=q_values[..., 1, :].mean(),
+            q2_min=q_values[..., 1, :].min(),
+            q2_max=q_values[..., 1, :].max(),
+            wp_mean=projected_preference.mean(),
+            wp_min=projected_preference.min(),
+            wp_max=projected_preference.max(),
         )
 
     def actor_loss(
@@ -363,10 +426,17 @@ class MOTD3Agent(TD3Agent):
         )
         q1 = q_values[..., 0, :]
         projected_preference = self._project_preference(agent_state, preference)
+        scalarized_q = scalarize(q1, preference).mean()
+        angle = directional_angle(projected_preference, q1).mean()
         actor_loss = pd_morl_actor_loss(
             q1, preference, projected_preference, self.actor_loss_coeff
         )
-        return PyTreeDict(actor_loss=actor_loss)
+        return PyTreeDict(
+            actor_loss=actor_loss,
+            actor_total_loss=actor_loss,
+            actor_scalarized_term=-scalarized_q,
+            actor_angle_term=angle,
+        )
 
 
 def make_mo_td3_agent(
@@ -384,7 +454,7 @@ def make_mo_td3_agent(
     actor_loss_coeff: float = 10.0,
     interpolator_state: PDMORLInterpolatorState | None = None,
     initial_key_solutions: chex.Array | None = None,
-) -> MOTD3Agent:
+) -> PDMORLAgent:
     assert isinstance(action_space, Box), "Only continuous action spaces are supported."
     max_action = float(jnp.max(action_space.high))
     actor_network = PreferenceActor(
@@ -396,7 +466,7 @@ def make_mo_td3_agent(
         reward_size=reward_size,
         hidden_layer_sizes=tuple(critic_hidden_layer_sizes),
     )
-    return MOTD3Agent(
+    return PDMORLAgent(
         critic_network=critic_network,
         actor_network=actor_network,
         obs_preprocessor=(running_statistics.normalize if normalize_obs else None),
@@ -413,15 +483,16 @@ def make_mo_td3_agent(
         policy_noise=policy_noise,
         clip_policy_noise=clip_policy_noise,
         critics_in_actor_loss="first",
+        record_grad_norms=True,
     )
 
 
-class MOTD3Workflow(TD3Workflow):
+class PDMORLWorkflow(TD3Workflow):
     env_extra_fields = ("ori_obs", "termination", "truncation")
 
     @classmethod
     def name(cls):
-        return "MO-TD3"
+        return "PD-MORL"
 
     @classmethod
     def _build_from_config(cls, config: DictConfig):
@@ -434,7 +505,7 @@ class MOTD3Workflow(TD3Workflow):
         artifact_path = Path(config.interpolator_artifact)
         if not artifact_path.is_absolute():
             artifact_path = Path(__file__).parents[2] / artifact_path
-        keys = key_preferences(config.reward_size)
+        keys = key_preferences(config.num_objectives)
         key_solutions, artifact = load_key_solution_artifact(artifact_path, keys)
         interpolator_state = fit_interpolator_state(keys, key_solutions, "initial")
         env_kwargs = {
@@ -450,26 +521,26 @@ class MOTD3Workflow(TD3Workflow):
             action_space=env.action_space,
             actor_hidden_layer_sizes=config.agent_network.actor_hidden_layer_sizes,
             critic_hidden_layer_sizes=config.agent_network.critic_hidden_layer_sizes,
-            reward_size=config.reward_size,
-            discount=config.discount,
-            exploration_epsilon=config.exploration_epsilon,
-            policy_noise=config.policy_noise,
-            clip_policy_noise=config.clip_policy_noise,
+            reward_size=config.num_objectives,
+            discount=config.gamma,
+            exploration_epsilon=config.exploration_noise,
+            policy_noise=config.target_policy_noise,
+            clip_policy_noise=config.noise_clip,
             normalize_obs=config.normalize_obs,
             process_count=config.process_count,
-            start_timesteps=config.start_timesteps,
+            start_timesteps=config.random_action_warmup,
             actor_loss_coeff=config.actor_loss_coeff,
             interpolator_state=interpolator_state,
             initial_key_solutions=jnp.asarray(key_solutions, dtype=jnp.float32),
         )
         optimizer = optax.chain(
-            optax.clip_by_global_norm(config.optimizer.grad_clip_norm),
+            optax.clip_by_global_norm(config.gradient_clip_norm),
             optax.adam(config.optimizer.lr),
         )
         replay_buffer = ReplayBuffer(
-            capacity=config.replay_buffer_capacity,
+            capacity=config.replay_capacity,
             min_sample_timesteps=max(
-                config.batch_size, config.learner_start_replay_entries
+                config.batch_size, config.learner_start_threshold
             ),
             sample_batch_size=config.batch_size,
         )
@@ -500,6 +571,9 @@ class MOTD3Workflow(TD3Workflow):
             agent=agent,
             max_episode_steps=config.env.max_episode_steps,
         )
+        workflow.key_update_controller = KeyInterpolatorUpdateController(
+            config.num_objectives, config.eval_episodes
+        )
         workflow.interpolator_artifact = artifact
         return workflow
 
@@ -510,10 +584,10 @@ class MOTD3Workflow(TD3Workflow):
             SampleBatch(
                 obs=dummy_obs,
                 actions=jnp.zeros(self.env.action_space.shape),
-                rewards=jnp.zeros((self.config.reward_size,)),
+                rewards=jnp.zeros((self.config.num_objectives,)),
                 extras=PyTreeDict(
                     policy_extras=PyTreeDict(
-                        preference=jnp.zeros((self.config.reward_size,))
+                        preference=jnp.zeros((self.config.num_objectives,))
                     ),
                     env_extras=PyTreeDict(
                         ori_obs=dummy_obs,
@@ -572,6 +646,8 @@ class MOTD3Workflow(TD3Workflow):
                 + completed_episodes_by_worker(
                     state.env_state.done[None, ...], self.config.process_count
                 ),
+                total_it=state.agent_state.extra_state.total_it
+                + jnp.uint32(self.config.process_count),
             )
         )
         return train_metrics, state.replace(agent_state=agent_state)
@@ -580,37 +656,71 @@ class MOTD3Workflow(TD3Workflow):
         """Run source-faithful key/full evaluation at the host boundary."""
         extra = state.agent_state.extra_state
         episode_count = np.asarray(jax.device_get(extra.episode_count))
-        control_metrics = {}
+        control_metrics = {
+            "morl/train/replay_size": int(
+                jax.device_get(state.replay_buffer_state.buffer_size)
+            ),
+            "morl/train/her_active": bool(
+                jax.device_get(state.replay_buffer_state.buffer_size)
+                > self.config.her_start_timesteps * self.config.process_count
+            ),
+            "morl/train/episode_count_min": int(episode_count.min()),
+            "morl/train/episode_count_max": int(episode_count.max()),
+            "morl/train/preference_subspaces": self.config.process_count,
+            "morl/control/key_update_count": int(
+                jax.device_get(extra.key_update_count)
+            ),
+            "morl/control/interpolator_refit_count": int(
+                jax.device_get(extra.interpolator_refit_count)
+            ),
+        }
 
-        if key_update_due(episode_count, int(jax.device_get(extra.eval_cnt_ep))):
+        if self.config.key_update_enabled and key_update_due(
+            episode_count, int(jax.device_get(extra.eval_cnt_ep))
+        ):
             eval_cnt_ep = extra.eval_cnt_ep + jnp.uint32(1)
             state = state.replace(
                 agent_state=state.agent_state.replace(
                     extra_state=extra.replace(eval_cnt_ep=eval_cnt_ep)
                 )
             )
-            key_result = self.morl_evaluator.evaluate(
+            solutions, improved, interpolator = self.key_update_controller.update(
+                self.morl_evaluator,
                 state.agent_state,
-                key_preferences(self.config.reward_size),
-                repeats=3,
+                extra.raw_key_solutions,
             )
-            solutions, improved, interpolator = update_key_solutions(
-                np.asarray(jax.device_get(extra.raw_key_solutions)),
-                key_result.returns_per_repeat,
-                key_preferences(self.config.reward_size),
+            interpolator = jtu.tree_map(
+                lambda new, old: jax.device_put(new, old.sharding),
+                interpolator,
+                extra.interpolator,
+            )
+            solutions = jax.device_put(
+                jnp.asarray(solutions, dtype=jnp.float32),
+                extra.raw_key_solutions.sharding,
             )
             extra = state.agent_state.extra_state.replace(
-                raw_key_solutions=jnp.asarray(solutions, dtype=jnp.float32),
+                raw_key_solutions=solutions,
                 interpolator=interpolator,
+                key_update_count=extra.key_update_count + jnp.uint32(1),
+                interpolator_refit_count=extra.interpolator_refit_count
+                + jnp.uint32(1),
             )
             state = state.replace(
                 agent_state=state.agent_state.replace(extra_state=extra)
             )
-            control_metrics["control/key_replacements"] = int(improved.sum())
+            control_metrics["morl/control/key_replacements"] = int(improved.sum())
+            control_metrics["morl/control/key_update_count"] = int(
+                jax.device_get(extra.key_update_count)
+            )
+            control_metrics["morl/control/interpolator_refit_count"] = int(
+                jax.device_get(extra.interpolator_refit_count)
+            )
 
         extra = state.agent_state.extra_state
         if full_evaluation_due(
-            episode_count, int(jax.device_get(extra.eval_cnt)), eval_freq=100
+            episode_count,
+            int(jax.device_get(extra.eval_cnt)),
+            eval_freq=self.config.eval_freq,
         ):
             eval_cnt = extra.eval_cnt + jnp.uint32(1)
             state = state.replace(
@@ -619,12 +729,15 @@ class MOTD3Workflow(TD3Workflow):
                 )
             )
             result = self.morl_evaluator.evaluate(
-                state.agent_state, preference_grid(0.005), repeats=3
+                state.agent_state,
+                preference_grid(self.config.training_eval_preference_step),
+                repeats=self.config.eval_episodes,
             )
             control_metrics.update(
                 {
-                    "eval/hypervolume": result.mean_hv,
-                    "eval/sparsity": result.mean_sparsity,
+                    "morl/eval/hv": result.mean_hv,
+                    "morl/eval/sparsity": result.mean_sparsity,
+                    "morl/eval/num_pareto_points": len(result.pareto_indices),
                 }
             )
 
@@ -633,7 +746,9 @@ class MOTD3Workflow(TD3Workflow):
     def evaluate_offline(self, state: State):
         """Run the official 1001-preference, six-repeat offline benchmark."""
         return self.morl_evaluator.evaluate(
-            state.agent_state, preference_grid(0.001), repeats=6
+            state.agent_state,
+            preference_grid(self.config.offline_eval_preference_step),
+            repeats=6,
         )
 
     def _periodic_evaluation_due(self, iterations, final_iteration):
@@ -643,12 +758,14 @@ class MOTD3Workflow(TD3Workflow):
     def _after_learning(self, state: State):
         """Run the source final 1001-preference, three-repeat evaluation."""
         result = self.morl_evaluator.evaluate(
-            state.agent_state, preference_grid(0.001), repeats=3
+            state.agent_state,
+            preference_grid(self.config.offline_eval_preference_step),
+            repeats=self.config.eval_episodes,
         )
         self.recorder.write(
             {
-                "eval/final_hypervolume": result.mean_hv,
-                "eval/final_sparsity": result.mean_sparsity,
+                "morl/eval/final_hv": result.mean_hv,
+                "morl/eval/final_sparsity": result.mean_sparsity,
             },
             int(jax.device_get(state.metrics.iterations)),
         )
@@ -658,5 +775,19 @@ class MOTD3Workflow(TD3Workflow):
         return parallel_actor_update_mask(
             state.metrics.iterations,
             self.config.process_count,
-            self.config.actor_update_interval,
+            self.config.policy_freq,
         )
+
+    def _record_train_metrics(self, train_metrics):
+        values = train_metrics.to_local_dict()
+        raw = values.pop("raw_loss_dict")
+        return {
+            **{f"morl/train/{key}": value for key, value in values.items()},
+            **{f"morl/train/{key}": value for key, value in raw.items()},
+        }
+
+
+# Backwards-compatible Step 4 names; new configs use the explicit PD-MORL names.
+MOTD3Agent = PDMORLAgent
+MOTD3Workflow = PDMORLWorkflow
+make_pd_morl_agent = make_mo_td3_agent
