@@ -80,3 +80,32 @@ offline aggregation.
 
 DEVIATION: none. The archived Step8 data-parallel learner is not re-enabled.
 No 1M-step production runs are started by this change.
+
+## Final 3-GPU independent-seed learner smoke
+
+The final concurrent smoke used the existing independent-run launcher on GPUs
+0, 1, and 2, with seeds `0,1,2`. Each child saw exactly one JAX GPU and ran
+Walker with actor/twin-critic `[400,400]`, K=10, batch 256, the existing replay
+and HER path, and the existing delayed actor/target-update math. Only the run
+length and evaluation triggers were shortened; the smoke did not start a
+data-parallel learner or a 1M-step experiment.
+
+Persistent output root:
+`/home/qiuquanj/projects/evorl/outputs/pd_morl_learner_smoke7/`.
+
+| seed | physical GPU UUID | JAX GPUs | critic updates | actor updates | target updates | HER | replay size | finite loss | checkpoint |
+|---:|---|---:|---:|---:|---:|---|---:|---|---|
+| 0 | `GPU-f3c66d4d-8c06-eeb7-6523-6513d4363087` | 1 | 133120 | 13312 | 13312 | true | 238640 | true | `walker/seed_0/checkpoints/512` |
+| 1 | `GPU-df61bf6b-9281-e8ee-e006-fcd247e644b5` | 1 | 133120 | 13312 | 13312 | true | 238640 | true | `walker/seed_1/checkpoints/512` |
+| 2 | `GPU-3e377ed9-38f1-5f1f-1c5f-c6312f44f6ed` | 1 | 133120 | 13312 | 13312 | true | 238640 | true | `walker/seed_2/checkpoints/512` |
+
+The launcher summary is `independent_seed_smoke_summary.json` and reports
+distinct model, optimizer, replay, and checkpoint directories for all three
+children. The interpolator fingerprint is identical across children because
+the shortened smoke intentionally disabled key replacement; each child still
+owns an independent interpolator state in its own state/checkpoint directory.
+
+Final status: **STEP8 INDEPENDENT-SEED MULTI-GPU RUNNER PASS**.
+
+Stop boundary reached: no data-parallel learner was restored, no tolerance was
+changed, and no 1M-step formal experiment was started.

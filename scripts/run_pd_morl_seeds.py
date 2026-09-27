@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -35,6 +36,50 @@ def _run(repo: Path, gpu: int, seed: int, run_name: str, args: argparse.Namespac
     return completed.returncode
 
 
+def _verify_reports(repo: Path, args: argparse.Namespace) -> int:
+    reports = []
+    for index, seed in enumerate(args.seeds):
+        run_name = (
+            f"seed_{seed}_rep_{index}"
+            if Counter(args.seeds)[seed] > 1
+            else f"seed_{seed}"
+        )
+        path = repo / args.output_root / "walker" / run_name / "smoke_report.json"
+        if not path.exists():
+            print(f"missing smoke report: {path}", file=sys.stderr)
+            return 1
+        reports.append(json.loads(path.read_text(encoding="utf-8")))
+    required = (
+        "replay_sampling", "critic_update_count", "actor_update_count",
+        "target_update_count", "her_active", "loss_finite", "checkpoint_path",
+    )
+    for report in reports:
+        if any(not report.get(field) for field in required):
+            print(f"incomplete learner smoke report: {report}", file=sys.stderr)
+            return 1
+        if report["jax_visible_device_count"] != 1:
+            print(f"multi-GPU child detected: {report}", file=sys.stderr)
+            return 1
+    if len({report["physical_gpu_uuid"] for report in reports}) != len(reports):
+        print("physical GPU UUID collision", file=sys.stderr)
+        return 1
+    if len({report["checkpoint_path"] for report in reports}) != len(reports):
+        print("checkpoint path collision", file=sys.stderr)
+        return 1
+    if any(not report.get("interpolator_fingerprint") for report in reports):
+        print("missing interpolator fingerprint", file=sys.stderr)
+        return 1
+    for field in ("model_fingerprint", "optimizer_fingerprint", "replay_fingerprint"):
+        if len({report[field] for report in reports}) != len(reports):
+            print(f"{field} collision", file=sys.stderr)
+            return 1
+    summary = {"status": "PASS", "runs": reports}
+    summary_path = repo / args.output_root / "independent_seed_smoke_summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    print(f"independent_seed_smoke_summary={summary_path}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seeds", nargs="+", type=int, required=True)
@@ -42,6 +87,7 @@ def main() -> int:
     parser.add_argument("--output-root", default="outputs/pd_morl")
     parser.add_argument("--max-parallel", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--require-learner-smoke", action="store_true")
     parser.add_argument("overrides", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
@@ -75,6 +121,8 @@ def main() -> int:
     if failures:
         print(f"failed_runs={failures}", file=sys.stderr)
         return 1
+    if args.require_learner_smoke:
+        return _verify_reports(repo, args)
     return 0
 
 

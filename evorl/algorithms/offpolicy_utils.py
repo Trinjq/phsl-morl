@@ -122,8 +122,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
                 env_extra_fields=self.env_extra_fields,
             )
 
-            # [T, B, ...] -> [T*B, ...]
-            trajectory = clean_trajectory(trajectory)
+            # [T, B, ...] -> [T*B, ...]; keep dones for PD-MORL prefill accounting.
             trajectory = flatten_rollout_trajectory(trajectory)
             trajectory = tree_stop_gradient(trajectory)
 
@@ -160,6 +159,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
         )
 
         agent_state = self._on_prefill_trajectory(agent_state, trajectory)
+        trajectory = clean_trajectory(trajectory)
         agent_state = _update_obs_preprocessor(agent_state, trajectory)
         replay_buffer_state = self._add_to_replay_buffer(
             replay_buffer_state, trajectory, random_rollout_key
@@ -183,6 +183,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
         )
 
         agent_state = self._on_prefill_trajectory(agent_state, trajectory)
+        trajectory = clean_trajectory(trajectory)
         agent_state = _update_obs_preprocessor(agent_state, trajectory)
         replay_buffer_state = self._add_to_replay_buffer(
             replay_buffer_state, trajectory, rollout_key
@@ -243,6 +244,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
 
         for i in range(num_iters):
             train_metrics, state = self._multi_steps(state)
+            self.last_train_metrics = train_metrics
             state, control_metrics = self._after_multi_steps(state)
             workflow_metrics = state.metrics
 

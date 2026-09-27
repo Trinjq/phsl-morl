@@ -132,7 +132,15 @@ def select_warmup_actions(
 
 def completed_episodes_by_worker(dones: chex.Array, process_count: int) -> chex.Array:
     """Count completed episodes for each logical worker in a rollout."""
-    completed_per_lane = jnp.asarray(dones, dtype=jnp.uint32).sum(axis=0)
+    dones = jnp.asarray(dones, dtype=jnp.uint32)
+    if dones.ndim == 1:
+        worker_ids = jnp.arange(dones.shape[0]) % process_count
+        return (
+            jnp.zeros((process_count,), dtype=jnp.uint32)
+            .at[worker_ids]
+            .add(dones)
+        )
+    completed_per_lane = dones.sum(axis=0)
     worker_ids = jnp.arange(completed_per_lane.shape[0]) % process_count
     return (
         jnp.zeros((process_count,), dtype=jnp.uint32)
