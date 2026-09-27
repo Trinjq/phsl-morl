@@ -1,12 +1,13 @@
 import logging
 from pathlib import Path
+
 import hydra
-from omegaconf import DictConfig, OmegaConf
 from hydra_utils import (
     get_output_dir,
-    set_omegaconf_resolvers,
     set_absl_log_level,
+    set_omegaconf_resolvers,
 )
+from omegaconf import DictConfig, OmegaConf
 
 logger = logging.getLogger("train")
 
@@ -21,7 +22,7 @@ def setup_recorders(config: DictConfig, workflow_name: str):
 
     recorders = []
     tags = OmegaConf.to_container(config.tags, resolve=True)
-    exp_name = "_".join([workflow_name, config.env.env_name, config.env.env_type])
+    exp_name = f"{workflow_name}_{config.env.env_name}_{config.env.env_type}"
     if len(tags) > 0:
         exp_name = exp_name + "|" + ",".join(tags)
 
@@ -72,7 +73,23 @@ def train(config: DictConfig) -> None:
     workflow_cls = type(workflow_cls.__name__, (workflow_cls,), {})
 
     devices = jax.local_devices()
-    if len(devices) > 1:
+    is_pd_morl = "mo_td3" in str(config.workflow_cls).lower()
+    if is_pd_morl:
+        gpu_devices = jax.devices("gpu")
+        if len(gpu_devices) != 1 or jax.local_device_count() != 1:
+            raise RuntimeError(
+                "PD-MORL production requires exactly one visible GPU; "
+                f"distributed_data_parallel=false, devices={gpu_devices}"
+            )
+        logger.info(
+            "distributed_data_parallel=false physical_gpu=%s visible_devices=%s",
+            gpu_devices[0],
+            gpu_devices,
+        )
+        workflow: Workflow = workflow_cls.build_from_config(
+            config, enable_jit=config.enable_jit
+        )
+    elif len(devices) > 1:
         logger.info(f"Enable Multiple Devices: {devices}")
         workflow: Workflow = workflow_cls.build_from_config(
             config, enable_multi_devices=True
@@ -90,7 +107,7 @@ def train(config: DictConfig) -> None:
         state = workflow.learn(state)
     except Exception as e:
         logger.error(f"Exception: {e}")
-        raise e
+        raise
     finally:
         workflow.close()
 
