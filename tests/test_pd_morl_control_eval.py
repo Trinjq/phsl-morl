@@ -20,6 +20,7 @@ from evorl.evaluators.pd_morl import (
 )
 from evorl.utils.pd_morl_interpolator import key_preferences
 from pymoo.indicators.hv import HV
+from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 
 KEYS = np.array([[0.0, 1.0], [0.5, 0.5], [1.0, 0.0]])
 
@@ -224,6 +225,33 @@ def test_hv_zero_reference_and_sign_conversion():
 def test_sparsity_against_source_formula():
     points = np.array([[1.0, 5.0], [2.0, 4.0], [3.0, 3.0]])
     assert sparsity(points) == pytest.approx(2.0)
+
+
+def test_sparsity_golden_filters_dominated_points_with_source_sign():
+    returns = np.array([[1, 4], [2, 3], [3, 2], [4, 1], [1, 1]], dtype=float)
+    objectives = -returns
+    front = objectives[
+        NonDominatedSorting().do(objectives, only_non_dominated_front=True)
+    ]
+    expected = np.square(np.diff(np.sort(front, axis=0), axis=0)).sum() / (
+        len(front) - 1
+    )
+    assert sparsity(returns) == pytest.approx(expected, abs=1e-12)
+
+
+def test_sparsity_dominated_points_change_unfiltered_value():
+    returns = np.array(
+        [[1, 5], [2, 4], [3, 3], [4, 2], [5, 1], [1, 1], [2, 2]],
+        dtype=float,
+    )
+    unfiltered = np.square(np.diff(np.sort(returns, axis=0), axis=0)).sum() / (
+        len(returns) - 1
+    )
+    assert sparsity(returns) != pytest.approx(unfiltered)
+
+
+def test_sparsity_empty_front_zero():
+    assert sparsity(np.empty((0, 2))) == 0.0
 
 
 def test_sparsity_single_point_zero():

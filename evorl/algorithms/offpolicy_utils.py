@@ -250,8 +250,17 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
 
             # current iteration
             iterations = state.metrics.iterations.tolist()
-            self.recorder.write(train_metrics.to_local_dict(), iterations)
-            self.recorder.write(workflow_metrics.to_local_dict(), iterations)
+            if (
+                iterations % int(self.config.get("log_interval", 1)) == 0
+                or iterations == final_iteration
+            ):
+                train_metrics_dict = train_metrics.to_local_dict()
+                workflow_metrics_dict = workflow_metrics.to_local_dict()
+                self.recorder.write(train_metrics_dict, iterations)
+                self.recorder.write(workflow_metrics_dict, iterations)
+                observe = getattr(self, "_observe_diagnostics", None)
+                if observe is not None:
+                    observe(iterations, train_metrics_dict, state)
             if control_metrics:
                 self.recorder.write(control_metrics, iterations)
 

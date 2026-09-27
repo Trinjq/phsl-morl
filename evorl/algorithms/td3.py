@@ -9,14 +9,15 @@ import jax.tree_util as jtu
 import optax
 from omegaconf import DictConfig
 
-from evorl.distributed import psum, pmean
+from evorl.agent import Agent, AgentState
+from evorl.distributed import pmean, psum
 from evorl.distributed.gradients import agent_gradient_update
-from evorl.envs import AutoresetMode, Box, create_env, Space
+from evorl.envs import AutoresetMode, Box, Space, create_env
 from evorl.evaluators import Evaluator
 from evorl.metrics import MetricBase, metric_field
 from evorl.networks import make_policy_network, make_q_network
-from evorl.rollout import rollout
 from evorl.replay_buffers import ReplayBuffer
+from evorl.rollout import rollout
 from evorl.sample_batch import SampleBatch
 from evorl.types import (
     Action,
@@ -29,9 +30,8 @@ from evorl.types import (
     pytree_field,
 )
 from evorl.utils import running_statistics
-from evorl.utils.jax_utils import scan_and_mean, tree_stop_gradient, tree_get
+from evorl.utils.jax_utils import scan_and_mean, tree_get, tree_stop_gradient
 from evorl.utils.rl_toolkits import flatten_rollout_trajectory, soft_target_update
-from evorl.agent import Agent, AgentState
 
 from .offpolicy_utils import OffPolicyWorkflowTemplate, clean_trajectory
 
@@ -362,7 +362,9 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
 
     def _parallel_actor_update_mask(self, state: State):
         del state
-        return None
+
+    def _empty_actor_loss_dict(self):
+        return PyTreeDict(actor_loss=jnp.zeros(()))
 
     def step(self, state: State) -> tuple[MetricBase, State]:
         key, rollout_key, learn_key = jax.random.split(state.key, num=3)
@@ -418,6 +420,7 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
                 params=agent_state.params.replace(critic_params=critic_params)
             ),
             detach_fn=lambda agent_state: agent_state.params.critic_params,
+            grad_norm_key=getattr(self, "critic_raw_grad_norm_key", None),
         )
 
         actor_update_fn = agent_gradient_update(
@@ -429,6 +432,7 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
                 params=agent_state.params.replace(actor_params=actor_params)
             ),
             detach_fn=lambda agent_state: agent_state.params.actor_params,
+            grad_norm_key=getattr(self, "actor_raw_grad_norm_key", None),
         )
 
         parallel_actor_mask = self._parallel_actor_update_mask(state)
@@ -492,7 +496,7 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
                 )
 
             initial_actor_loss = jnp.zeros(())
-            initial_actor_loss_dict = PyTreeDict(actor_loss=initial_actor_loss)
+            initial_actor_loss_dict = self._empty_actor_loss_dict()
             (
                 (_, agent_state, opt_state, actor_loss, actor_loss_dict),
                 (critic_losses, critic_loss_dicts),
@@ -531,7 +535,7 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
                         )
 
                         (
-                            (critic_loss, critic_loss_dict),
+                            (_critic_loss, _critic_loss_dict),
                             agent_state,
                             critic_opt_state,
                         ) = critic_update_fn(

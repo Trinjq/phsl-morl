@@ -164,6 +164,7 @@ def sparsity(returns: np.ndarray) -> float:
     points = np.asarray(returns, dtype=np.float64)
     if points.ndim != 2:
         raise ValueError("returns must have shape [N, L]")
+    points = points[non_dominated_indices(points)]
     if len(points) <= 1:
         return 0.0
     ordered = np.sort(points, axis=0)

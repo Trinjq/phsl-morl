@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any
 
@@ -233,6 +234,7 @@ class MOTD3Agent(TD3Agent):
             extra_state=PyTreeDict(
                 worker_steps=jnp.zeros((self.process_count,), dtype=jnp.uint32),
                 episode_count=jnp.zeros((self.process_count,), dtype=jnp.uint32),
+                total_it=jnp.uint32(0),
                 eval_cnt_ep=jnp.uint32(1),
                 eval_cnt=jnp.uint32(1),
                 raw_key_solutions=self.initial_key_solutions,
@@ -344,14 +346,30 @@ class MOTD3Agent(TD3Agent):
             sample_batch.actions,
         )
         projected_preference = self._project_preference(agent_state, preference)
-        critic_loss = pd_morl_critic_loss(q_values, q_target, projected_preference)
+        smooth_l1 = twin_smooth_l1_loss(q_values, q_target)
+        angles = directional_angle(
+            projected_preference[..., None, :], q_values
+        ).mean(axis=0)
+        critic_loss = smooth_l1 + angles.sum()
         return PyTreeDict(
             critic_loss=critic_loss,
+            critic_total_loss=critic_loss,
+            critic_smooth_l1=smooth_l1,
             q_value=scalarize(q_values, preference).mean(),
             q_target=q_target,
-            critic_angle=directional_angle(
-                projected_preference[..., None, :], q_values
-            ).mean(axis=0),
+            critic_angle=angles,
+            q1_min=q_values[..., 0, :].min(),
+            q1_mean=q_values[..., 0, :].mean(),
+            q1_max=q_values[..., 0, :].max(),
+            q2_min=q_values[..., 1, :].min(),
+            q2_mean=q_values[..., 1, :].mean(),
+            q2_max=q_values[..., 1, :].max(),
+            target_min=q_target.min(),
+            target_mean=q_target.mean(),
+            target_max=q_target.max(),
+            wp_min=projected_preference.min(),
+            wp_mean=projected_preference.mean(),
+            wp_max=projected_preference.max(),
         )
 
     def actor_loss(
@@ -371,10 +389,15 @@ class MOTD3Agent(TD3Agent):
         )
         q1 = q_values[..., 0, :]
         projected_preference = self._project_preference(agent_state, preference)
-        actor_loss = pd_morl_actor_loss(
-            q1, preference, projected_preference, self.actor_loss_coeff
+        scalarized = scalarize(q1, preference).mean()
+        angle = directional_angle(projected_preference, q1).mean()
+        actor_loss = -scalarized + self.actor_loss_coeff * angle
+        return PyTreeDict(
+            actor_loss=actor_loss,
+            actor_total_loss=actor_loss,
+            actor_scalarized_term=scalarized,
+            actor_angle=angle,
         )
-        return PyTreeDict(actor_loss=actor_loss)
 
 
 def make_mo_td3_agent(
@@ -426,6 +449,8 @@ def make_mo_td3_agent(
 
 class MOTD3Workflow(TD3Workflow):
     env_extra_fields = ("ori_obs", "termination", "truncation")
+    critic_raw_grad_norm_key = "critic_raw_grad_norm"
+    actor_raw_grad_norm_key = "actor_raw_grad_norm"
 
     @classmethod
     def name(cls):
@@ -574,11 +599,19 @@ class MOTD3Workflow(TD3Workflow):
         train_metrics, state = super().step(state)
         agent_state = state.agent_state.replace(
             extra_state=state.agent_state.extra_state.replace(
-                worker_steps=state.agent_state.extra_state.worker_steps
-                + jnp.uint32(self.config.rollout_length),
-                episode_count=state.agent_state.extra_state.episode_count
-                + completed_episodes_by_worker(
-                    state.env_state.done[None, ...], self.config.process_count
+                worker_steps=(
+                    state.agent_state.extra_state.worker_steps
+                    + jnp.uint32(self.config.rollout_length)
+                ),
+                episode_count=(
+                    state.agent_state.extra_state.episode_count
+                    + completed_episodes_by_worker(
+                        state.env_state.done[None, ...], self.config.process_count
+                    )
+                ),
+                total_it=(
+                    state.agent_state.extra_state.total_it
+                    + jnp.uint32(self.config.process_count)
                 ),
             )
         )
@@ -615,6 +648,9 @@ class MOTD3Workflow(TD3Workflow):
                 agent_state=state.agent_state.replace(extra_state=extra)
             )
             control_metrics["control/key_replacements"] = int(improved.sum())
+            self.key_replacement_count = getattr(self, "key_replacement_count", 0) + int(
+                improved.sum()
+            )
 
         extra = state.agent_state.extra_state
         if full_evaluation_due(
@@ -629,6 +665,9 @@ class MOTD3Workflow(TD3Workflow):
             result = self.morl_evaluator.evaluate(
                 state.agent_state, preference_grid(0.005), repeats=3
             )
+            self._write_evaluation_snapshot(
+                "training_full", result, int(jax.device_get(state.metrics.iterations))
+            )
             control_metrics.update(
                 {
                     "eval/hypervolume": result.mean_hv,
@@ -637,6 +676,86 @@ class MOTD3Workflow(TD3Workflow):
             )
 
         return state, control_metrics
+
+    def _observe_diagnostics(self, iteration, train_metrics, state):
+        """Write periodic formal-run diagnostics without touching learner state."""
+        raw = train_metrics["raw_loss_dict"]
+        finite = all(np.isfinite(np.asarray(value)).all() for value in raw.values())
+        self.diagnostics_finite = getattr(self, "diagnostics_finite", True) and finite
+        sampled = int(jax.device_get(state.metrics.sampled_timesteps))
+        her_threshold = int(self.config.her_start_timesteps) * int(
+            self.config.process_count
+        )
+        payload = {
+            "iteration": int(iteration),
+            **{
+                key: np.asarray(value).tolist()
+                for key, value in raw.items()
+            },
+            "finite": bool(finite),
+            "replay_size": int(
+                jax.device_get(state.replay_buffer_state.buffer_size)
+            ),
+            "base_inserts": sampled,
+            "her_inserts": max(sampled - her_threshold, 0)
+            * int(self.config.num_relabel_preferences),
+            "her_active": sampled > her_threshold,
+            "worker_steps": np.asarray(
+                jax.device_get(state.agent_state.extra_state.worker_steps)
+            ).tolist(),
+            "episode_count": np.asarray(
+                jax.device_get(state.agent_state.extra_state.episode_count)
+            ).tolist(),
+            "eval_cnt_ep": int(
+                jax.device_get(state.agent_state.extra_state.eval_cnt_ep)
+            ),
+            "eval_cnt": int(jax.device_get(state.agent_state.extra_state.eval_cnt)),
+            "key_evaluation_count": int(
+                jax.device_get(state.agent_state.extra_state.eval_cnt_ep)
+            )
+            - 1,
+            "key_replacement_count": getattr(self, "key_replacement_count", 0),
+            "interpolator_refit_count": int(
+                jax.device_get(state.agent_state.extra_state.eval_cnt_ep)
+            )
+            - 1,
+            "full_evaluation_count": int(
+                jax.device_get(state.agent_state.extra_state.eval_cnt)
+            )
+            - 1,
+        }
+        path = Path(self.config.output_dir) / "training_diagnostics.jsonl"
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload) + "\n")
+
+    def _write_evaluation_snapshot(self, kind, result, iteration):
+        """Persist HV/Pareto progression without changing learner state."""
+        path = Path(self.config.output_dir) / "pd_morl_evaluations.jsonl"
+        payload = {
+            "kind": kind,
+            "iteration": int(iteration),
+            "preferences": result.preferences.tolist(),
+            "returns_per_repeat": result.returns_per_repeat.tolist(),
+            "mean_returns": result.mean_returns.tolist(),
+            "hv_per_repeat": result.hv_per_repeat.tolist(),
+            "sparsity_per_repeat": result.sparsity_per_repeat.tolist(),
+            "mean_hv": result.mean_hv,
+            "mean_sparsity": result.mean_sparsity,
+            "pareto_indices": result.pareto_indices.tolist(),
+            "pareto_returns": result.pareto_returns.tolist(),
+        }
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload) + "\n")
+        if kind == "training_final":
+            target = Path(self.config.output_dir) / "final_training_eval" / "results.json"
+        else:
+            target = (
+                Path(self.config.output_dir)
+                / "pareto_fronts"
+                / f"{kind}_{iteration}.json"
+            )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def evaluate_offline(self, state: State):
         """Run the official 1001-preference, six-repeat offline benchmark."""
@@ -649,9 +768,12 @@ class MOTD3Workflow(TD3Workflow):
         return False
 
     def _after_learning(self, state: State):
-        """Run the source final 1001-preference, three-repeat evaluation."""
+        """Run the source training-final 1001-preference, three-repeat evaluation."""
         result = self.morl_evaluator.evaluate(
             state.agent_state, preference_grid(0.001), repeats=3
+        )
+        self._write_evaluation_snapshot(
+            "training_final", result, int(jax.device_get(state.metrics.iterations))
         )
         self.recorder.write(
             {
@@ -667,4 +789,14 @@ class MOTD3Workflow(TD3Workflow):
             state.metrics.iterations,
             self.config.process_count,
             self.config.actor_update_interval,
+        )
+
+    def _empty_actor_loss_dict(self):
+        zero = jnp.zeros(())
+        return PyTreeDict(
+            actor_loss=zero,
+            actor_total_loss=zero,
+            actor_scalarized_term=zero,
+            actor_angle=zero,
+            actor_raw_grad_norm=zero,
         )
