@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from pathlib import Path
 
@@ -104,6 +105,16 @@ def train(config: DictConfig) -> None:
 
     try:
         state = workflow.init(jax.random.PRNGKey(config.seed))
+        if is_pd_morl:
+            import jax.tree_util as jtu
+            import numpy as np
+
+            digest = hashlib.sha256()
+            for leaf in jtu.tree_leaves(
+                (state.agent_state.params, state.agent_state.extra_state)
+            ):
+                digest.update(np.asarray(leaf).tobytes())
+            logger.info("initial_pd_morl_state_sha256=%s", digest.hexdigest())
         state = workflow.learn(state)
     except Exception as e:
         logger.error(f"Exception: {e}")
