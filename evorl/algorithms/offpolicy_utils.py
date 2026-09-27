@@ -1,24 +1,23 @@
 import logging
 import math
-from omegaconf import DictConfig
 
+import chex
 import jax
 import jax.numpy as jnp
-import chex
+from omegaconf import DictConfig
 
-from evorl.replay_buffers import ReplayBufferState
-from evorl.envs import Discrete
-from evorl.distributed.comm import psum
-from evorl.workflows import OffPolicyWorkflow
-from evorl.sample_batch import SampleBatch
-from evorl.types import State, PyTreeDict
-from evorl.rollout import rollout
-from evorl.utils.rl_toolkits import flatten_rollout_trajectory
-from evorl.utils import running_statistics
-from evorl.utils.jax_utils import tree_stop_gradient, scan_and_last
 from evorl.agent import RandomAgent
+from evorl.distributed.comm import psum
+from evorl.envs import Discrete
 from evorl.recorders import add_prefix
-
+from evorl.replay_buffers import ReplayBufferState
+from evorl.rollout import rollout
+from evorl.sample_batch import SampleBatch
+from evorl.types import PyTreeDict, State
+from evorl.utils import running_statistics
+from evorl.utils.jax_utils import scan_and_last, tree_stop_gradient
+from evorl.utils.rl_toolkits import flatten_rollout_trajectory
+from evorl.workflows import OffPolicyWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +30,9 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
     def _add_to_replay_buffer(self, replay_buffer_state, trajectory, key):
         del key
         return self.replay_buffer.add(replay_buffer_state, trajectory)
+
+    def _on_prefill_trajectory(self, agent_state, trajectory):
+        return agent_state
 
     @classmethod
     def _rescale_config(cls, config: DictConfig) -> None:
@@ -157,6 +159,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
             rollout_length=rollout_length,
         )
 
+        agent_state = self._on_prefill_trajectory(agent_state, trajectory)
         agent_state = _update_obs_preprocessor(agent_state, trajectory)
         replay_buffer_state = self._add_to_replay_buffer(
             replay_buffer_state, trajectory, random_rollout_key
@@ -179,6 +182,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
             rollout_length=rollout_length,
         )
 
+        agent_state = self._on_prefill_trajectory(agent_state, trajectory)
         agent_state = _update_obs_preprocessor(agent_state, trajectory)
         replay_buffer_state = self._add_to_replay_buffer(
             replay_buffer_state, trajectory, rollout_key
@@ -214,6 +218,18 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
 
         return train_metrics, state
 
+    def _after_multi_steps(self, state):
+        """Run optional host-side control work outside learner JIT."""
+        return state, {}
+
+    def _periodic_evaluation_due(self, iterations, final_iteration):
+        return (
+            iterations % self.config.eval_interval == 0 or iterations == final_iteration
+        )
+
+    def _after_learning(self, state):
+        return state
+
     def learn(self, state: State) -> State:
         num_devices = jax.device_count()
         one_step_timesteps = self.config.rollout_length * self.config.num_envs
@@ -227,17 +243,17 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
 
         for i in range(num_iters):
             train_metrics, state = self._multi_steps(state)
+            state, control_metrics = self._after_multi_steps(state)
             workflow_metrics = state.metrics
 
             # current iteration
             iterations = state.metrics.iterations.tolist()
             self.recorder.write(train_metrics.to_local_dict(), iterations)
             self.recorder.write(workflow_metrics.to_local_dict(), iterations)
+            if control_metrics:
+                self.recorder.write(control_metrics, iterations)
 
-            if (
-                iterations % self.config.eval_interval == 0
-                or iterations == final_iteration
-            ):
+            if self._periodic_evaluation_due(iterations, final_iteration):
                 eval_metrics, state = self.evaluate(state)
                 self.recorder.write(
                     add_prefix(eval_metrics.to_local_dict(), "eval"), iterations
@@ -250,7 +266,7 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
                 iterations, saved_state, force=iterations == final_iteration
             )
 
-        return state
+        return self._after_learning(state)
 
     @classmethod
     def enable_jit(cls) -> None:

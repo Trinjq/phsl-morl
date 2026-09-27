@@ -67,6 +67,7 @@ dependencies = [
     "optax",
     "orbax-checkpoint",
     "pandas",
+    "pymoo",
     "scipy",
     "wandb",
 ]

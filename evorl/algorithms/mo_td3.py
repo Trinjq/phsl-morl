@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import chex
@@ -11,7 +12,14 @@ from omegaconf import DictConfig
 
 from evorl.agent import AgentState
 from evorl.envs import AutoresetMode, Box, Space, create_env
-from evorl.evaluators import Evaluator
+from evorl.evaluators import Evaluator, PDMORLEvaluator
+from evorl.evaluators.pd_morl import (
+    full_evaluation_due,
+    key_update_due,
+    load_key_solution_artifact,
+    preference_grid,
+    update_key_solutions,
+)
 from evorl.networks import MLP
 from evorl.replay_buffers import ReplayBuffer
 from evorl.replay_buffers.her import add_her_transitions
@@ -122,6 +130,17 @@ def select_warmup_actions(
     return jnp.where(random_mask[..., None], random_actions, policy_actions)
 
 
+def completed_episodes_by_worker(dones: chex.Array, process_count: int) -> chex.Array:
+    """Count completed episodes for each logical worker in a rollout."""
+    completed_per_lane = jnp.asarray(dones, dtype=jnp.uint32).sum(axis=0)
+    worker_ids = jnp.arange(completed_per_lane.shape[0]) % process_count
+    return (
+        jnp.zeros((process_count,), dtype=jnp.uint32)
+        .at[worker_ids]
+        .add(completed_per_lane)
+    )
+
+
 class PreferenceActor(nn.Module):
     action_size: int
     hidden_layer_sizes: tuple[int, ...] = (400, 400)
@@ -172,6 +191,7 @@ class MOTD3Agent(TD3Agent):
     start_timesteps: int = pytree_field(default=10000, static=True)
     actor_loss_coeff: float = pytree_field(default=10.0, static=True)
     interpolator_state: PDMORLInterpolatorState | None = None
+    initial_key_solutions: chex.Array | None = None
     action_low: chex.Array | None = None
     action_high: chex.Array | None = None
 
@@ -204,6 +224,10 @@ class MOTD3Agent(TD3Agent):
             obs_preprocessor_state=obs_preprocessor_state,
             extra_state=PyTreeDict(
                 worker_steps=jnp.zeros((self.process_count,), dtype=jnp.uint32),
+                episode_count=jnp.zeros((self.process_count,), dtype=jnp.uint32),
+                eval_cnt_ep=jnp.uint32(1),
+                eval_cnt=jnp.uint32(1),
+                raw_key_solutions=self.initial_key_solutions,
                 interpolator=self.interpolator_state,
             ),
         )
@@ -359,6 +383,7 @@ def make_mo_td3_agent(
     start_timesteps: int = 10000,
     actor_loss_coeff: float = 10.0,
     interpolator_state: PDMORLInterpolatorState | None = None,
+    initial_key_solutions: chex.Array | None = None,
 ) -> MOTD3Agent:
     assert isinstance(action_space, Box), "Only continuous action spaces are supported."
     max_action = float(jnp.max(action_space.high))
@@ -380,6 +405,7 @@ def make_mo_td3_agent(
         start_timesteps=start_timesteps,
         actor_loss_coeff=actor_loss_coeff,
         interpolator_state=interpolator_state,
+        initial_key_solutions=initial_key_solutions,
         action_low=action_space.low,
         action_high=action_space.high,
         discount=discount,
@@ -400,10 +426,17 @@ class MOTD3Workflow(TD3Workflow):
     @classmethod
     def _build_from_config(cls, config: DictConfig):
         jax.config.update("jax_default_matmul_precision", config.matmul_precision)
-        key_solutions = np.loadtxt(config.interpolator_artifact, delimiter=",")
-        interpolator_state = fit_interpolator_state(
-            key_preferences(config.reward_size), key_solutions, "initial"
-        )
+        if config.rollout_length != 1 or config.num_envs != config.process_count:
+            raise ValueError(
+                "source-faithful control requires rollout_length=1 and "
+                "num_envs=process_count"
+            )
+        artifact_path = Path(config.interpolator_artifact)
+        if not artifact_path.is_absolute():
+            artifact_path = Path(__file__).parents[2] / artifact_path
+        keys = key_preferences(config.reward_size)
+        key_solutions, artifact = load_key_solution_artifact(artifact_path, keys)
+        interpolator_state = fit_interpolator_state(keys, key_solutions, "initial")
         env_kwargs = {
             "episode_length": config.env.max_episode_steps,
             "autoreset_mode": AutoresetMode.NORMAL,
@@ -427,6 +460,7 @@ class MOTD3Workflow(TD3Workflow):
             start_timesteps=config.start_timesteps,
             actor_loss_coeff=config.actor_loss_coeff,
             interpolator_state=interpolator_state,
+            initial_key_solutions=jnp.asarray(key_solutions, dtype=jnp.float32),
         )
         optimizer = optax.chain(
             optax.clip_by_global_norm(config.optimizer.grad_clip_norm),
@@ -453,7 +487,21 @@ class MOTD3Workflow(TD3Workflow):
             action_fn=agent.evaluate_actions,
             max_episode_steps=config.env.max_episode_steps,
         )
-        return cls(env, agent, optimizer, evaluator, replay_buffer, config)
+        workflow = cls(env, agent, optimizer, evaluator, replay_buffer, config)
+        control_eval_env = create_env(
+            config.env,
+            parallel=1,
+            episode_length=config.env.max_episode_steps,
+            autoreset_mode=AutoresetMode.DISABLED,
+            vector_reward=True,
+        )
+        workflow.morl_evaluator = PDMORLEvaluator(
+            env=control_eval_env,
+            agent=agent,
+            max_episode_steps=config.env.max_episode_steps,
+        )
+        workflow.interpolator_artifact = artifact
+        return workflow
 
     def _setup_replaybuffer(self, key: chex.PRNGKey):
         dummy_obs = self.env.obs_space.sample(key)
@@ -504,15 +552,107 @@ class MOTD3Workflow(TD3Workflow):
             )
         )
 
+    def _on_prefill_trajectory(self, agent_state, trajectory):
+        return agent_state.replace(
+            extra_state=agent_state.extra_state.replace(
+                episode_count=agent_state.extra_state.episode_count
+                + completed_episodes_by_worker(
+                    trajectory.dones, self.config.process_count
+                )
+            )
+        )
+
     def step(self, state: State):
         train_metrics, state = super().step(state)
         agent_state = state.agent_state.replace(
             extra_state=state.agent_state.extra_state.replace(
                 worker_steps=state.agent_state.extra_state.worker_steps
-                + jnp.uint32(self.config.rollout_length)
+                + jnp.uint32(self.config.rollout_length),
+                episode_count=state.agent_state.extra_state.episode_count
+                + completed_episodes_by_worker(
+                    state.env_state.done[None, ...], self.config.process_count
+                ),
             )
         )
         return train_metrics, state.replace(agent_state=agent_state)
+
+    def _after_multi_steps(self, state: State):
+        """Run source-faithful key/full evaluation at the host boundary."""
+        extra = state.agent_state.extra_state
+        episode_count = np.asarray(jax.device_get(extra.episode_count))
+        control_metrics = {}
+
+        if key_update_due(episode_count, int(jax.device_get(extra.eval_cnt_ep))):
+            eval_cnt_ep = extra.eval_cnt_ep + jnp.uint32(1)
+            state = state.replace(
+                agent_state=state.agent_state.replace(
+                    extra_state=extra.replace(eval_cnt_ep=eval_cnt_ep)
+                )
+            )
+            key_result = self.morl_evaluator.evaluate(
+                state.agent_state,
+                key_preferences(self.config.reward_size),
+                repeats=3,
+            )
+            solutions, improved, interpolator = update_key_solutions(
+                np.asarray(jax.device_get(extra.raw_key_solutions)),
+                key_result.returns_per_repeat,
+                key_preferences(self.config.reward_size),
+            )
+            extra = state.agent_state.extra_state.replace(
+                raw_key_solutions=jnp.asarray(solutions, dtype=jnp.float32),
+                interpolator=interpolator,
+            )
+            state = state.replace(
+                agent_state=state.agent_state.replace(extra_state=extra)
+            )
+            control_metrics["control/key_replacements"] = int(improved.sum())
+
+        extra = state.agent_state.extra_state
+        if full_evaluation_due(
+            episode_count, int(jax.device_get(extra.eval_cnt)), eval_freq=100
+        ):
+            eval_cnt = extra.eval_cnt + jnp.uint32(1)
+            state = state.replace(
+                agent_state=state.agent_state.replace(
+                    extra_state=extra.replace(eval_cnt=eval_cnt)
+                )
+            )
+            result = self.morl_evaluator.evaluate(
+                state.agent_state, preference_grid(0.005), repeats=3
+            )
+            control_metrics.update(
+                {
+                    "eval/hypervolume": result.mean_hv,
+                    "eval/sparsity": result.mean_sparsity,
+                }
+            )
+
+        return state, control_metrics
+
+    def evaluate_offline(self, state: State):
+        """Run the official 1001-preference, six-repeat offline benchmark."""
+        return self.morl_evaluator.evaluate(
+            state.agent_state, preference_grid(0.001), repeats=6
+        )
+
+    def _periodic_evaluation_due(self, iterations, final_iteration):
+        del iterations, final_iteration
+        return False
+
+    def _after_learning(self, state: State):
+        """Run the source final 1001-preference, three-repeat evaluation."""
+        result = self.morl_evaluator.evaluate(
+            state.agent_state, preference_grid(0.001), repeats=3
+        )
+        self.recorder.write(
+            {
+                "eval/final_hypervolume": result.mean_hv,
+                "eval/final_sparsity": result.mean_sparsity,
+            },
+            int(jax.device_get(state.metrics.iterations)),
+        )
+        return state
 
     def _parallel_actor_update_mask(self, state):
         return parallel_actor_update_mask(
