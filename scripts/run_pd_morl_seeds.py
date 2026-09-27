@@ -6,12 +6,13 @@ import argparse
 import os
 import subprocess
 import sys
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 
-def _run(repo: Path, gpu: int, seed: int, args: argparse.Namespace) -> int:
-    run_dir = repo / args.output_root / "walker" / f"seed_{seed}"
+def _run(repo: Path, gpu: int, seed: int, run_name: str, args: argparse.Namespace) -> int:
+    run_dir = repo / args.output_root / "walker" / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(gpu)
@@ -26,7 +27,7 @@ def _run(repo: Path, gpu: int, seed: int, args: argparse.Namespace) -> int:
         f"output_dir={run_dir}",
     ] + list(args.overrides)
     print(
-        f"run_id=pd_morl_walker_seed_{seed} physical_gpu={gpu} "
+        f"run_id=pd_morl_walker_{run_name} physical_gpu={gpu} "
         f"training_seed={seed} CUDA_VISIBLE_DEVICES={gpu} output_dir={run_dir}",
         flush=True,
     )
@@ -47,14 +48,23 @@ def main() -> int:
     if not args.gpus:
         raise SystemExit("at least one GPU is required")
     workers = min(len(args.gpus), args.max_parallel or len(args.gpus))
+    duplicate_seeds = Counter(args.seeds)
     if args.dry_run:
         for index, seed in enumerate(args.seeds):
-            print(f"gpu={args.gpus[index % len(args.gpus)]} seed={seed}")
+            suffix = f"_rep_{index}" if duplicate_seeds[seed] > 1 else ""
+            print(f"gpu={args.gpus[index % len(args.gpus)]} seed={seed}{suffix}")
         return 0
     failures = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(_run, repo, args.gpus[index % len(args.gpus)], seed, args): seed
+            pool.submit(
+                _run,
+                repo,
+                args.gpus[index % len(args.gpus)],
+                seed,
+                f"seed_{seed}_rep_{index}" if duplicate_seeds[seed] > 1 else f"seed_{seed}",
+                args,
+            ): seed
             for index, seed in enumerate(args.seeds)
         }
         for future in as_completed(futures):
