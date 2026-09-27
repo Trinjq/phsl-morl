@@ -36,12 +36,12 @@ The source behavior is:
 | Policy | `deterministic=True`; preference reset occurs after each preference episode |
 | Return | Undiscounted vector reward sum until done/episode limit |
 | Training grid | Step `0.005`, 201 preferences; three repeats |
-| Final/offline grid | Step `0.001`, 1001 preferences; offline default six repeats |
+| Final/offline grid | Step `0.001`, 1001 preferences; training final three repeats, offline six repeats |
 | Training aggregation | Compute HV/sparsity per repeat, then mean; objective returns mean across repeats |
 | Offline aggregation | Retain per-repeat HV/sparsity/objectives, report mean/std, then filter the mean objectives |
 | Pareto | `NonDominatedSorting().do(-returns, only_non_dominated_front=True)`; duplicate non-dominated rows remain |
 | Hypervolume | `pymoo`, zero reference, evaluated on negative returns for minimization convention |
-| Sparsity | Sum squared adjacent sorted gaps over objectives, divide by `N-1`; `N<=1` returns zero |
+| Sparsity | For each repeat, Pareto-filter its returns, then sum squared adjacent sorted gaps over objectives and divide by `N-1`; `N<=1` returns zero |
 
 ## Initial artifact and provenance
 
@@ -101,8 +101,10 @@ path. `evaluate_offline` uses the separate 1001-point/six-repeat path.
 
 Pareto filtering is maximization-based and preserves duplicates. Hypervolume
 uses the installed `pymoo` implementation with zero reference and the official
-negative-return conversion. Sparsity follows the source formula exactly,
-including zero for zero or one point.
+negative-return conversion. Sparsity now follows the source order independently
+for every repeat: non-dominated filter, gap formula, then repeat mean. The
+previous evaluator incorrectly applied the gap formula to all returns. Empty or
+single-point fronts return zero.
 
 ## JIT boundary
 

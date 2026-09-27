@@ -160,7 +160,7 @@ $$
 
 ### 9. 评测平面与指标计算（HV, Sparsity, Pareto）—— 存在关键差异
 - **官方源码** (`lib/utilities/MORL_utils.py:100-140`):
-  - 评估偏好网格：训练期 201 点（Step 0.005，3 repeat），终期 1001 点（Step 0.001，6 repeat）；
+  - 评估偏好网格：训练期 201 点（Step 0.005，3 repeat），training final 1001 点（Step 0.001，3 repeat），独立 offline paper-report 1001 点（6 repeat）；
   - 评估种子：`eval_ep * 11`；
   - HV：`pymoo` 负收益、0 参考点；
   - **Sparsity**：**必须先对收益集调用 `NonDominatedSorting` 筛选出非支配解集合**，然后再对非支配解在各目标轴上排序计算相邻差分平方和除以 $N_{\text{nondom}} - 1$。
