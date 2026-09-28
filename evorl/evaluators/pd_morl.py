@@ -1,7 +1,7 @@
 """Host-side PD-MORL control and evaluation behavior."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
 
@@ -41,6 +41,14 @@ class MORLEvaluationResult:
     mean_sparsity: float
     pareto_indices: np.ndarray
     pareto_returns: np.ndarray
+    pareto_counts_per_repeat: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.int64))
+    mean_pareto_count: float = 0.0
+    source_hv: float = 0.0
+    source_sparsity: float = 0.0
+    source_pareto_point_count: int = 0
+    mean_repeat_hv: float = 0.0
+    mean_repeat_sparsity: float = 0.0
+    mean_repeat_pareto_count: float = 0.0
 
 
 def load_key_solution_artifact(
@@ -185,21 +193,57 @@ def evaluate_morl(
         ]
         for seed in evaluation_seeds(repeats)
     ]
-    returns = np.asarray(rows)
-    hv = np.asarray([hypervolume(row) for row in returns])
-    sp = np.asarray([sparsity(row) for row in returns])
+    return morl_evaluation_result(preferences, np.asarray(rows))
+
+
+def morl_evaluation_result(
+    preferences: np.ndarray, returns_per_repeat: np.ndarray
+) -> MORLEvaluationResult:
+    """Build the shared serial/batched MORL result on the host."""
+    preferences = np.asarray(preferences, dtype=np.float64)
+    returns = np.asarray(returns_per_repeat)
+    if returns.ndim != 3 or returns.shape[1] != len(preferences):
+        raise ValueError("returns_per_repeat must have shape [S, K, L]")
+    hv_list = []
+    sp_list = []
+    counts = []
+    for row in returns:
+        idx = non_dominated_indices(row)
+        front = row[idx]
+        hv_list.append(hypervolume(front))
+        sp_list.append(sparsity(front))
+        counts.append(len(front))
+    hv = np.asarray(hv_list, dtype=np.float64)
+    sp = np.asarray(sp_list, dtype=np.float64)
+    pareto_counts = np.asarray(counts, dtype=np.int64)
     mean_returns = returns.mean(axis=0)
     indices = non_dominated_indices(mean_returns)
+    source_pareto = mean_returns[indices]
+    source_hv = hypervolume(source_pareto)
+    source_sp = sparsity(source_pareto)
+    source_count = len(source_pareto)
+    mean_rep_hv = float(hv.mean())
+    mean_rep_sp = float(sp.mean())
+    mean_rep_cnt = float(pareto_counts.mean())
+
     return MORLEvaluationResult(
         preferences=preferences,
         returns_per_repeat=returns,
         mean_returns=mean_returns,
         hv_per_repeat=hv,
         sparsity_per_repeat=sp,
-        mean_hv=float(hv.mean()),
-        mean_sparsity=float(sp.mean()),
+        mean_hv=mean_rep_hv,
+        mean_sparsity=mean_rep_sp,
         pareto_indices=indices,
-        pareto_returns=mean_returns[indices],
+        pareto_returns=source_pareto,
+        pareto_counts_per_repeat=pareto_counts,
+        mean_pareto_count=mean_rep_cnt,
+        source_hv=source_hv,
+        source_sparsity=source_sp,
+        source_pareto_point_count=source_count,
+        mean_repeat_hv=mean_rep_hv,
+        mean_repeat_sparsity=mean_rep_sp,
+        mean_repeat_pareto_count=mean_rep_cnt,
     )
 
 
@@ -261,3 +305,107 @@ class PDMORLEvaluator:
             preferences,
             repeats,
         )
+
+
+class BatchedPDMORLEvaluator:
+    """GPU-native evaluator with fixed-shape key and full-evaluation batches."""
+
+    def __init__(self, key_env, env, agent, max_episode_steps: int):
+        if key_env.num_envs != 9:
+            raise ValueError("key evaluation requires exactly 9 environment lanes")
+        if env.num_envs < 1:
+            raise ValueError("eval batch size must be positive")
+        self.key_env = key_env
+        self.env = env
+        self.agent = agent
+        self.max_episode_steps = max_episode_steps
+        self._key_batch = jax.jit(lambda *args: self._evaluate_batch(key_env, *args))
+        self._full_batch = jax.jit(lambda *args: self._evaluate_batch(env, *args))
+
+    def _evaluate_batch(
+        self,
+        env,
+        agent_state: AgentState,
+        preferences: jax.Array,
+        seeds: jax.Array,
+        preference_indices: jax.Array,
+    ) -> jax.Array:
+        reset_keys = jax.vmap(
+            lambda seed, index: jax.random.fold_in(
+                jax.random.PRNGKey(seed), index
+            )
+        )(seeds, preference_indices)
+        rollout_keys = jax.vmap(lambda key: jax.random.fold_in(key, 1))(reset_keys)
+        # VmapWrapper(num_envs=1) splits the serial reset key once. Reproduce
+        # that lane key so serial and batched evaluation see identical resets.
+        lane_reset_keys = jax.vmap(lambda key: jax.random.split(key, 1)[0])(
+            reset_keys
+        )
+        env_state = env.reset(lane_reset_keys)
+
+        def action_fn(current_agent_state, batch, key):
+            batch = SampleBatch(
+                obs=batch.obs,
+                extras=PyTreeDict(
+                    policy_extras=PyTreeDict(preference=preferences)
+                ),
+            )
+            return self.agent.evaluate_actions(current_agent_state, batch, key)
+
+        metrics, _ = fast_eval_rollout_episode(
+            env.step,
+            action_fn,
+            env_state,
+            agent_state,
+            rollout_keys,
+            self.max_episode_steps,
+        )
+        return metrics.episode_returns
+
+    def evaluate(
+        self, agent_state: AgentState, preferences: np.ndarray, repeats: int
+    ) -> MORLEvaluationResult:
+        preferences = np.asarray(preferences, dtype=np.float64)
+        if preferences.ndim != 2 or len(preferences) == 0:
+            raise ValueError("preferences must have shape [K, L] with K > 0")
+
+        seeds = evaluation_seeds(repeats)
+        count = len(preferences)
+        flat_preferences = np.tile(preferences, (repeats, 1))
+        flat_seeds = np.repeat(seeds, count)
+        flat_indices = np.tile(np.arange(count, dtype=np.int64), repeats)
+
+        if len(flat_preferences) == 9:
+            flat_returns = np.asarray(
+                self._key_batch(
+                    agent_state, flat_preferences, flat_seeds, flat_indices
+                )
+            )
+        else:
+            batch_size = self.env.num_envs
+            chunks = []
+            for start in range(0, len(flat_preferences), batch_size):
+                stop = min(start + batch_size, len(flat_preferences))
+                valid = stop - start
+                batch_preferences = np.zeros(
+                    (batch_size, preferences.shape[1]), dtype=preferences.dtype
+                )
+                batch_seeds = np.zeros((batch_size,), dtype=flat_seeds.dtype)
+                batch_indices = np.zeros((batch_size,), dtype=flat_indices.dtype)
+                batch_preferences[:valid] = flat_preferences[start:stop]
+                batch_seeds[:valid] = flat_seeds[start:stop]
+                batch_indices[:valid] = flat_indices[start:stop]
+                chunks.append(
+                    np.asarray(
+                        self._full_batch(
+                            agent_state,
+                            batch_preferences,
+                            batch_seeds,
+                            batch_indices,
+                        )
+                    )[:valid]
+                )
+            flat_returns = np.concatenate(chunks, axis=0)
+
+        returns = flat_returns.reshape(repeats, count, -1)
+        return morl_evaluation_result(preferences, returns)

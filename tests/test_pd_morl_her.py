@@ -144,6 +144,23 @@ def test_vectorized_batch_crosses_warmup_sequentially():
     )
 
 
+def test_explicit_global_base_transition_threshold_ignores_lane_count():
+    replay = ReplayBuffer(capacity=32, sample_batch_size=1)
+    spec = _batch([0]).take(0)
+    state = replay.add(replay.init(spec), _batch(jnp.arange(9)))
+    state = add_her_transitions(
+        replay,
+        state,
+        _batch([100, 101]),
+        jax.random.PRNGKey(9),
+        3,
+        start_timesteps=999,
+        process_count=640,
+        base_transition_threshold=10,
+    )
+    assert int(state.buffer_size) == 14
+
+
 def test_num_relabel_preferences_parameterization_and_jitted_add():
     for num_relabels in (0, 1, 3):
         replay = ReplayBuffer(capacity=16, sample_batch_size=1)

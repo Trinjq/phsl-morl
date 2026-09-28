@@ -74,10 +74,15 @@ def add_her_transitions(
     num_relabel_preferences: int,
     start_timesteps: int,
     process_count: int,
+    base_transition_threshold: int | None = None,
 ) -> ReplayBufferState:
     """Physically add original and active HER entries to one replay pool."""
     batch_size = transitions.rewards.shape[0]
-    threshold = start_timesteps * process_count
+    threshold = (
+        start_timesteps * process_count
+        if base_transition_threshold is None
+        else base_transition_threshold
+    )
 
     def activation_step(size, unused):
         del unused

@@ -1,0 +1,131 @@
+[
+  {
+    "k": 5,
+    "microbenchmark": {
+      "k": 5,
+      "compile_time_s": 24.51228930382058,
+      "steady_time_s": 21.30177786294371,
+      "transitions_per_s": 2403.555249210764,
+      "critic_updates_per_s": 18.777775384459094,
+      "actor_updates_per_s": 1.8777775384459092,
+      "replay_samples_per_s": 76913.76797474445,
+      "data_reuse_intensity": 32.0,
+      "peak_gpu_mem_mb": 1087.79052734375
+    },
+    "short_learning": {
+      "k": 5,
+      "budget_transitions": 201280,
+      "total_wall_clock_s": 213.3351447256282,
+      "source_hv": 12455.434845246258,
+      "source_sparsity": 112.3722656940887,
+      "source_pareto_point_count": 20,
+      "mean_repeat_hv": 14741.685218419827,
+      "mean_repeat_sparsity": 692.596732776574,
+      "mean_repeat_pareto_count": 20.0,
+      "repeat_hv": [
+        15249.408816811469,
+        14301.867561066581,
+        14673.779277381429
+      ],
+      "repeat_sparsity": [
+        1221.2274904015285,
+        417.539772716972,
+        439.02293521122147
+      ],
+      "obj0_range": [
+        17.888765335083008,
+        35.7385368347168
+      ],
+      "obj1_range": [
+        237.660400390625,
+        379.8159484863281
+      ]
+    }
+  },
+  {
+    "k": 10,
+    "microbenchmark": {
+      "k": 10,
+      "compile_time_s": 18.719091350678355,
+      "steady_time_s": 22.073076943401247,
+      "transitions_per_s": 2319.56786683092,
+      "critic_updates_per_s": 36.24324791923313,
+      "actor_updates_per_s": 3.624324791923313,
+      "replay_samples_per_s": 148452.3434771789,
+      "data_reuse_intensity": 64.0,
+      "peak_gpu_mem_mb": 1548.296630859375
+    },
+    "short_learning": {
+      "k": 10,
+      "budget_transitions": 201280,
+      "total_wall_clock_s": 202.6475404361263,
+      "source_hv": 7668.664206679503,
+      "source_sparsity": 3.289611834219873,
+      "source_pareto_point_count": 8,
+      "mean_repeat_hv": 8064.10361500585,
+      "mean_repeat_sparsity": 8.399010035919781,
+      "mean_repeat_pareto_count": 13.666666666666666,
+      "repeat_hv": [
+        8325.958017723227,
+        8184.671947255556,
+        7681.680880038766
+      ],
+      "repeat_sparsity": [
+        11.527483470115559,
+        12.929231589173469,
+        0.740315048470317
+      ],
+      "obj0_range": [
+        38.32938003540039,
+        41.945655822753906
+      ],
+      "obj1_range": [
+        176.77398681640625,
+        183.1442413330078
+      ]
+    }
+  },
+  {
+    "k": 20,
+    "microbenchmark": {
+      "k": 20,
+      "compile_time_s": 18.28759352490306,
+      "steady_time_s": 21.842034762725234,
+      "transitions_per_s": 2344.103951678345,
+      "critic_updates_per_s": 73.25324848994828,
+      "actor_updates_per_s": 7.3253248489948275,
+      "replay_samples_per_s": 300045.30581482814,
+      "data_reuse_intensity": 128.0,
+      "peak_gpu_mem_mb": 1648.871337890625
+    },
+    "short_learning": {
+      "k": 20,
+      "budget_transitions": 201280,
+      "total_wall_clock_s": 220.18388864630833,
+      "source_hv": 63475.1073858859,
+      "source_sparsity": 0.0,
+      "source_pareto_point_count": 1,
+      "mean_repeat_hv": 125490.11749705828,
+      "mean_repeat_sparsity": 10430.26217298652,
+      "mean_repeat_pareto_count": 2.0,
+      "repeat_hv": [
+        143891.1428576773,
+        115199.41163062118,
+        117379.79800287634
+      ],
+      "repeat_sparsity": [
+        11764.301253472688,
+        19526.485265486874,
+        0.0
+      ],
+      "obj0_range": [
+        129.79177856445312,
+        129.79177856445312
+      ],
+      "obj1_range": [
+        489.0533752441406,
+        489.0533752441406
+      ]
+    }
+  }
+]

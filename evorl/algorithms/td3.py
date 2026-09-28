@@ -366,6 +366,10 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
     def _empty_actor_loss_dict(self):
         return PyTreeDict(actor_loss=jnp.zeros(()))
 
+    def _after_rollout_agent_state(self, agent_state, trajectory_dones):
+        del trajectory_dones
+        return agent_state
+
     def step(self, state: State) -> tuple[MetricBase, State]:
         key, rollout_key, learn_key = jax.random.split(state.key, num=3)
 
@@ -381,11 +385,13 @@ class TD3Workflow(OffPolicyWorkflowTemplate):
         )
 
         trajectory_dones = trajectory.dones
+        agent_state = self._after_rollout_agent_state(
+            state.agent_state, trajectory_dones
+        )
         trajectory = clean_trajectory(trajectory)
         trajectory = flatten_rollout_trajectory(trajectory)
         trajectory = tree_stop_gradient(trajectory)
 
-        agent_state = state.agent_state
         if agent_state.obs_preprocessor_state is not None:
             agent_state = agent_state.replace(
                 obs_preprocessor_state=running_statistics.update(

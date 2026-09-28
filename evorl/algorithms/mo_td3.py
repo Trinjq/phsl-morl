@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,7 @@ from omegaconf import DictConfig
 
 from evorl.agent import AgentState
 from evorl.envs import AutoresetMode, Box, Space, create_env
-from evorl.evaluators import Evaluator, PDMORLEvaluator
+from evorl.evaluators import BatchedPDMORLEvaluator, Evaluator, PDMORLEvaluator
 from evorl.evaluators.pd_morl import (
     full_evaluation_due,
     key_update_due,
@@ -43,6 +44,7 @@ from evorl.utils.pd_morl_interpolator import (
     key_preferences,
 )
 
+from .offpolicy_utils import skip_replay_buffer_state
 from .td3 import TD3Agent, TD3NetworkParams, TD3Workflow
 
 
@@ -595,32 +597,44 @@ class MOTD3Workflow(TD3Workflow):
             )
         )
 
-    def step(self, state: State):
-        train_metrics, state = super().step(state)
-        agent_state = state.agent_state.replace(
-            extra_state=state.agent_state.extra_state.replace(
+    def _critic_updates_per_rollout(self) -> int:
+        return self.config.process_count
+
+    def _after_rollout_agent_state(self, agent_state, trajectory_dones):
+        return agent_state.replace(
+            extra_state=agent_state.extra_state.replace(
                 worker_steps=(
-                    state.agent_state.extra_state.worker_steps
+                    agent_state.extra_state.worker_steps
                     + jnp.uint32(self.config.rollout_length)
                 ),
                 episode_count=(
-                    state.agent_state.extra_state.episode_count
+                    agent_state.extra_state.episode_count
                     + completed_episodes_by_worker(
-                        state.env_state.done[None, ...], self.config.process_count
+                        trajectory_dones, self.config.process_count
                     )
                 ),
                 total_it=(
-                    state.agent_state.extra_state.total_it
-                    + jnp.uint32(self.config.process_count)
+                    agent_state.extra_state.total_it
+                    + jnp.uint32(self._critic_updates_per_rollout())
                 ),
             )
         )
-        return train_metrics, state.replace(agent_state=agent_state)
+
+    def _control_episode_count(self, extra):
+        return np.asarray(jax.device_get(extra.episode_count))
+
+    def _her_threshold_multiplier(self) -> int:
+        return self.config.process_count
+
+    def _her_base_transition_threshold(self) -> int:
+        return int(self.config.her_start_timesteps) * int(
+            self._her_threshold_multiplier()
+        )
 
     def _after_multi_steps(self, state: State):
         """Run source-faithful key/full evaluation at the host boundary."""
         extra = state.agent_state.extra_state
-        episode_count = np.asarray(jax.device_get(extra.episode_count))
+        episode_count = self._control_episode_count(extra)
         control_metrics = {}
 
         if key_update_due(episode_count, int(jax.device_get(extra.eval_cnt_ep))):
@@ -683,9 +697,13 @@ class MOTD3Workflow(TD3Workflow):
         finite = all(np.isfinite(np.asarray(value)).all() for value in raw.values())
         self.diagnostics_finite = getattr(self, "diagnostics_finite", True) and finite
         sampled = int(jax.device_get(state.metrics.sampled_timesteps))
-        her_threshold = int(self.config.her_start_timesteps) * int(
-            self.config.process_count
+        her_threshold = self._her_base_transition_threshold()
+        worker_steps_arr = np.asarray(
+            jax.device_get(state.agent_state.extra_state.worker_steps)
         )
+        warmup_limit = int(self.config.start_timesteps)
+        random_counts = np.minimum(worker_steps_arr, warmup_limit)
+        policy_counts = np.maximum(worker_steps_arr - warmup_limit, 0)
         payload = {
             "iteration": int(iteration),
             **{
@@ -700,9 +718,12 @@ class MOTD3Workflow(TD3Workflow):
             "her_inserts": max(sampled - her_threshold, 0)
             * int(self.config.num_relabel_preferences),
             "her_active": sampled > her_threshold,
-            "worker_steps": np.asarray(
-                jax.device_get(state.agent_state.extra_state.worker_steps)
-            ).tolist(),
+            "worker_steps": worker_steps_arr.tolist(),
+            "random_transition_count_per_group": random_counts.tolist(),
+            "policy_transition_count_per_group": policy_counts.tolist(),
+            "global_random_transition_count": int(random_counts.sum()),
+            "global_policy_transition_count": int(policy_counts.sum()),
+            "random_action_fraction": float(np.mean(worker_steps_arr < warmup_limit)),
             "episode_count": np.asarray(
                 jax.device_get(state.agent_state.extra_state.episode_count)
             ).tolist(),
@@ -731,23 +752,87 @@ class MOTD3Workflow(TD3Workflow):
     def _write_evaluation_snapshot(self, kind, result, iteration):
         """Persist HV/Pareto progression without changing learner state."""
         path = Path(self.config.output_dir) / "pd_morl_evaluations.jsonl"
+        mean_returns = np.asarray(result.mean_returns)
+        obj_stats = {}
+        for l in range(mean_returns.shape[-1]):
+            obj_stats[f"obj{l+1}_min"] = float(mean_returns[:, l].min())
+            obj_stats[f"obj{l+1}_max"] = float(mean_returns[:, l].max())
+            obj_stats[f"obj{l+1}_mean"] = float(mean_returns[:, l].mean())
+
+        pareto_counts = (
+            result.pareto_counts_per_repeat.tolist()
+            if hasattr(result, "pareto_counts_per_repeat") and len(result.pareto_counts_per_repeat) > 0
+            else [len(result.pareto_returns)] * len(result.hv_per_repeat)
+        )
+        mean_pareto_count = (
+            float(result.mean_pareto_count)
+            if hasattr(result, "mean_pareto_count")
+            else float(len(result.pareto_returns))
+        )
+        pref_return_map = [
+            {"preference": pref.tolist(), "mean_return": ret.tolist()}
+            for pref, ret in zip(result.preferences, result.mean_returns)
+        ]
+
+        source_hv = float(getattr(result, "source_hv", result.mean_hv))
+        source_sparsity = float(getattr(result, "source_sparsity", result.mean_sparsity))
+        source_count = int(getattr(result, "source_pareto_point_count", len(result.pareto_returns)))
+        mean_rep_hv = float(getattr(result, "mean_repeat_hv", result.mean_hv))
+        mean_rep_sp = float(getattr(result, "mean_repeat_sparsity", result.mean_sparsity))
+        mean_rep_cnt = float(getattr(result, "mean_repeat_pareto_count", mean_pareto_count))
+
         payload = {
             "kind": kind,
             "iteration": int(iteration),
+            "source_hv": source_hv,
+            "source_sparsity": source_sparsity,
+            "source_pareto_point_count": source_count,
+            "mean_repeat_hv": mean_rep_hv,
+            "mean_repeat_sparsity": mean_rep_sp,
+            "mean_repeat_pareto_count": mean_rep_cnt,
+            "repeat_hv": result.hv_per_repeat.tolist(),
+            "repeat_sparsity": result.sparsity_per_repeat.tolist(),
+            "repeat_pareto_point_count": pareto_counts,
+            "final_hv": source_hv,
+            "final_sparsity": source_sparsity,
+            "final_pareto_point_count": source_count,
+            "mean_pareto_point_count": mean_rep_cnt,
             "preferences": result.preferences.tolist(),
             "returns_per_repeat": result.returns_per_repeat.tolist(),
             "mean_returns": result.mean_returns.tolist(),
             "hv_per_repeat": result.hv_per_repeat.tolist(),
             "sparsity_per_repeat": result.sparsity_per_repeat.tolist(),
-            "mean_hv": result.mean_hv,
-            "mean_sparsity": result.mean_sparsity,
+            "pareto_counts_per_repeat": pareto_counts,
+            "mean_hv": mean_rep_hv,
+            "mean_sparsity": mean_rep_sp,
             "pareto_indices": result.pareto_indices.tolist(),
             "pareto_returns": result.pareto_returns.tolist(),
+            **obj_stats,
+            "preference_return_map": pref_return_map,
         }
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload) + "\n")
         if kind == "training_final":
             target = Path(self.config.output_dir) / "final_training_eval" / "results.json"
+            npz_target = Path(self.config.output_dir) / "final_training_eval" / "pareto_artifacts.npz"
+            npz_target.parent.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(
+                npz_target,
+                preferences=result.preferences,
+                returns_per_repeat=result.returns_per_repeat,
+                mean_returns=result.mean_returns,
+                pareto_returns=result.pareto_returns,
+                pareto_indices=result.pareto_indices,
+                hv_per_repeat=result.hv_per_repeat,
+                sparsity_per_repeat=result.sparsity_per_repeat,
+                pareto_counts_per_repeat=np.asarray(pareto_counts),
+                source_hv=source_hv,
+                source_sparsity=source_sparsity,
+                source_pareto_point_count=source_count,
+                mean_repeat_hv=mean_rep_hv,
+                mean_repeat_sparsity=mean_rep_sp,
+                mean_repeat_pareto_count=mean_rep_cnt,
+            )
         else:
             target = (
                 Path(self.config.output_dir)
@@ -769,27 +854,36 @@ class MOTD3Workflow(TD3Workflow):
 
     def _after_learning(self, state: State):
         """Run the source training-final 1001-preference, three-repeat evaluation."""
-        result = self.morl_evaluator.evaluate(
-            state.agent_state, preference_grid(0.001), repeats=3
-        )
-        self._write_evaluation_snapshot(
-            "training_final", result, int(jax.device_get(state.metrics.iterations))
-        )
-        self.recorder.write(
-            {
-                "eval/final_hypervolume": result.mean_hv,
-                "eval/final_sparsity": result.mean_sparsity,
-            },
-            int(jax.device_get(state.metrics.iterations)),
-        )
+        if getattr(self.config, "run_final_evaluation", True):
+            result = self.morl_evaluator.evaluate(
+                state.agent_state, preference_grid(0.001), repeats=3
+            )
+            iterations = int(jax.device_get(state.metrics.iterations))
+            self._write_evaluation_snapshot("training_final", result, iterations)
+            self.recorder.write(
+                {
+                    "eval/final_hypervolume": result.mean_hv,
+                    "eval/final_sparsity": result.mean_sparsity,
+                    "eval/final_pareto_point_count": len(result.pareto_returns),
+                },
+                iterations,
+            )
+        else:
+            iterations = int(jax.device_get(state.metrics.iterations))
+
+        saved_state = state
+        if hasattr(self.config, "save_replay_buffer") and not self.config.save_replay_buffer:
+            saved_state = skip_replay_buffer_state(saved_state)
+        if self.checkpoint_manager.latest_step() != iterations:
+            self.checkpoint_manager.save(iterations, saved_state, force=True)
+        self.checkpoint_manager.wait_until_finished()
         return state
 
     def _parallel_actor_update_mask(self, state):
-        return parallel_actor_update_mask(
-            state.metrics.iterations,
-            self.config.process_count,
-            self.config.actor_update_interval,
+        update_ids = state.agent_state.extra_state.total_it + jnp.arange(
+            1, self._critic_updates_per_rollout() + 1
         )
+        return update_ids % self.config.actor_update_interval == 0
 
     def _empty_actor_loss_dict(self):
         zero = jnp.zeros(())
@@ -800,3 +894,191 @@ class MOTD3Workflow(TD3Workflow):
             actor_angle=zero,
             actor_raw_grad_norm=zero,
         )
+
+
+class PDMORLGPUWorkflow(MOTD3Workflow):
+    """GPU-native batched PD-MORL; not optimizer-trajectory equivalent."""
+
+    @classmethod
+    def name(cls):
+        return "GPU-native PD-MORL"
+
+    @classmethod
+    def _build_from_config(cls, config: DictConfig):
+        jax.config.update("jax_default_matmul_precision", config.matmul_precision)
+        if config.process_count != 10:
+            raise ValueError("GPU-native PD-MORL keeps exactly 10 preference groups")
+        expected_envs = config.process_count * config.envs_per_preference_group
+        if config.num_envs != expected_envs:
+            raise ValueError(
+                "num_envs must equal process_count * envs_per_preference_group: "
+                f"expected {expected_envs}, got {config.num_envs}"
+            )
+        if config.critic_updates_per_rollout < 1:
+            raise ValueError("critic_updates_per_rollout must be positive")
+        if config.random_timesteps > config.learning_start_timesteps:
+            raise ValueError("random_timesteps cannot exceed learning_start_timesteps")
+        random_prefill = (
+            config.random_timesteps // config.num_envs
+        ) * config.num_envs
+        policy_prefill = math.ceil(
+            (config.learning_start_timesteps - random_prefill) / config.num_envs
+        ) * config.num_envs
+        prefill_transitions = random_prefill + policy_prefill
+        chunk_transitions = (
+            config.num_envs * config.rollout_length * config.fold_iters
+        )
+        remaining = config.total_timesteps - prefill_transitions
+        if remaining < 0 or remaining % chunk_transitions:
+            raise ValueError(
+                "GPU-native total_timesteps must include prefill and leave a whole "
+                "number of static training chunks: "
+                f"total={config.total_timesteps}, prefill={prefill_transitions}, "
+                f"chunk={chunk_transitions}"
+            )
+
+        artifact_path = Path(config.interpolator_artifact)
+        if not artifact_path.is_absolute():
+            artifact_path = Path(__file__).parents[2] / artifact_path
+        keys = key_preferences(config.reward_size)
+        key_solutions, artifact = load_key_solution_artifact(artifact_path, keys)
+        interpolator_state = fit_interpolator_state(keys, key_solutions, "initial")
+
+        env_kwargs = {
+            "episode_length": config.env.max_episode_steps,
+            "autoreset_mode": AutoresetMode.NORMAL,
+            "record_ori_obs": True,
+            "vector_reward": True,
+            "episode_preference": True,
+            "process_count": config.process_count,
+        }
+        env = create_env(config.env, parallel=config.num_envs, **env_kwargs)
+        agent = make_mo_td3_agent(
+            action_space=env.action_space,
+            actor_hidden_layer_sizes=config.agent_network.actor_hidden_layer_sizes,
+            critic_hidden_layer_sizes=config.agent_network.critic_hidden_layer_sizes,
+            reward_size=config.reward_size,
+            discount=config.discount,
+            exploration_epsilon=config.exploration_epsilon,
+            policy_noise=config.policy_noise,
+            clip_policy_noise=config.clip_policy_noise,
+            normalize_obs=config.normalize_obs,
+            process_count=config.process_count,
+            start_timesteps=config.start_timesteps,
+            actor_loss_coeff=config.actor_loss_coeff,
+            interpolator_state=interpolator_state,
+            initial_key_solutions=jnp.asarray(key_solutions, dtype=jnp.float32),
+        )
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(config.optimizer.grad_clip_norm),
+            optax.adam(config.optimizer.lr),
+        )
+        replay_buffer = ReplayBuffer(
+            capacity=config.replay_buffer_capacity,
+            min_sample_timesteps=max(
+                config.replay_batch_size, config.learner_start_replay_entries
+            ),
+            sample_batch_size=config.replay_batch_size,
+        )
+        eval_env = create_env(
+            config.env,
+            parallel=config.num_eval_envs,
+            episode_length=config.env.max_episode_steps,
+            autoreset_mode=AutoresetMode.DISABLED,
+            vector_reward=True,
+            episode_preference=True,
+            process_count=config.process_count,
+        )
+        evaluator = Evaluator(
+            env=eval_env,
+            action_fn=agent.evaluate_actions,
+            max_episode_steps=config.env.max_episode_steps,
+        )
+        workflow = cls(env, agent, optimizer, evaluator, replay_buffer, config)
+
+        control_kwargs = {
+            "episode_length": config.env.max_episode_steps,
+            "autoreset_mode": AutoresetMode.DISABLED,
+            "vector_reward": True,
+        }
+        key_eval_env = create_env(config.env, parallel=9, **control_kwargs)
+        full_eval_env = create_env(
+            config.env, parallel=config.eval_batch_size, **control_kwargs
+        )
+        workflow.morl_evaluator = BatchedPDMORLEvaluator(
+            key_env=key_eval_env,
+            env=full_eval_env,
+            agent=agent,
+            max_episode_steps=config.env.max_episode_steps,
+        )
+        workflow.interpolator_artifact = artifact
+        return workflow
+
+    def _postsetup_replaybuffer(self, state: State) -> State:
+        state = super()._postsetup_replaybuffer(state)
+        prefill_per_group = (
+            self.config.learning_start_timesteps + self.config.process_count - 1
+        ) // self.config.process_count
+        return state.replace(
+            agent_state=state.agent_state.replace(
+                extra_state=state.agent_state.extra_state.replace(
+                    worker_steps=jnp.full(
+                        (self.config.process_count,),
+                        prefill_per_group,
+                        dtype=jnp.uint32,
+                    )
+                )
+            )
+        )
+
+    def _after_rollout_agent_state(self, agent_state, trajectory_dones):
+        group_transitions = int(self.config.envs_per_preference_group) * int(
+            self.config.rollout_length
+        )
+        return agent_state.replace(
+            extra_state=agent_state.extra_state.replace(
+                worker_steps=(
+                    agent_state.extra_state.worker_steps + jnp.uint32(group_transitions)
+                ),
+                episode_count=(
+                    agent_state.extra_state.episode_count
+                    + completed_episodes_by_worker(
+                        trajectory_dones, self.config.process_count
+                    )
+                ),
+                total_it=(
+                    agent_state.extra_state.total_it
+                    + jnp.uint32(self._critic_updates_per_rollout())
+                ),
+            )
+        )
+
+    def _critic_updates_per_rollout(self) -> int:
+        return self.config.critic_updates_per_rollout
+
+    def _add_to_replay_buffer(self, replay_buffer_state, trajectory, key):
+        return add_her_transitions(
+            self.replay_buffer,
+            replay_buffer_state,
+            trajectory,
+            jax.random.fold_in(key, 0x484552),
+            self.config.num_relabel_preferences,
+            self.config.her_start_timesteps,
+            self.config.num_envs,
+            base_transition_threshold=self.config.her_start_base_transitions,
+        )
+
+    def _control_episode_count(self, extra):
+        completed = np.asarray(jax.device_get(extra.episode_count))
+        return completed // int(self.config.envs_per_preference_group)
+
+    def _her_threshold_multiplier(self) -> int:
+        return self.config.num_envs
+
+    def _her_base_transition_threshold(self) -> int:
+        return int(self.config.her_start_base_transitions)
+
+    def _after_learning(self, state: State):
+        if self.config.get("run_final_evaluation", True):
+            return super()._after_learning(state)
+        return state

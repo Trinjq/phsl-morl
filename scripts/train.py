@@ -34,6 +34,9 @@ def _json_default(value):
 
 
 def _evaluation_payload(result):
+    pareto_counts = getattr(result, "pareto_counts_per_repeat", None)
+    if pareto_counts is None or len(pareto_counts) == 0:
+        pareto_counts = [len(result.pareto_returns)]
     return {
         "evaluation_seeds": [0, 11, 22, 33, 44, 55],
         "preferences": result.preferences,
@@ -48,6 +51,13 @@ def _evaluation_payload(result):
         "pareto_indices": result.pareto_indices,
         "pareto_returns": result.pareto_returns,
         "pareto_point_count": len(result.pareto_returns),
+        "source_hv": getattr(result, "source_hv", result.mean_hv),
+        "source_sparsity": getattr(result, "source_sparsity", result.mean_sparsity),
+        "source_pareto_point_count": getattr(result, "source_pareto_point_count", len(result.pareto_returns)),
+        "mean_repeat_hv": getattr(result, "mean_repeat_hv", result.mean_hv),
+        "mean_repeat_sparsity": getattr(result, "mean_repeat_sparsity", result.mean_sparsity),
+        "mean_repeat_pareto_count": getattr(result, "mean_repeat_pareto_count", float(np.mean(pareto_counts))),
+        "pareto_counts_per_repeat": np.asarray(pareto_counts),
     }
 
 
@@ -611,18 +621,31 @@ def train(config: DictConfig) -> None:
     devices = jax.local_devices()
     is_pd_morl = "mo_td3" in str(config.workflow_cls).lower()
     if is_pd_morl:
-        gpu_devices = jax.devices("gpu")
-        if len(gpu_devices) != 1 or jax.local_device_count() != 1:
+        gpu_devices = [device for device in devices if device.platform == "gpu"]
+        allow_cpu_smoke = bool(config.get("allow_cpu_smoke", False))
+        if (len(gpu_devices) != 1 or jax.local_device_count() != 1) and not (
+            allow_cpu_smoke and not gpu_devices
+        ):
             raise RuntimeError(
                 "PD-MORL production requires exactly one visible GPU; "
                 f"distributed_data_parallel=false, devices={gpu_devices}"
             )
-        logger.info(
-            "distributed_data_parallel=false physical_gpu=%s visible_devices=%s",
-            gpu_devices[0],
-            gpu_devices,
-        )
-        gpu = _gpu_metadata()
+        if gpu_devices:
+            logger.info(
+                "distributed_data_parallel=false physical_gpu=%s visible_devices=%s",
+                gpu_devices[0],
+                gpu_devices,
+            )
+            gpu = _gpu_metadata()
+        else:
+            logger.warning("CPU-only PD-MORL smoke; not valid for performance claims")
+            gpu = {
+                "physical_gpu_id": None,
+                "gpu_model": None,
+                "gpu_uuid": None,
+                "nvidia_driver": None,
+                "gpu_memory_mib": None,
+            }
         try:
             git_commit = subprocess.check_output(
                 ["git", "rev-parse", "HEAD"],
@@ -636,7 +659,11 @@ def train(config: DictConfig) -> None:
             "training_seed": int(config.seed),
             "environment": "Walker Brax adapter",
             "backend": "Brax",
-            "run_name": "source-faithful PD-MORL reproduction with Brax environment adaptation",
+            "run_name": (
+                "GPU-native PD-MORL"
+                if "PDMORLGPUWorkflow" in str(config.workflow_cls)
+                else "source-faithful PD-MORL reproduction with Brax environment adaptation"
+            ),
             "git_commit": git_commit,
             "runtime_source_sha256": _source_fingerprint(),
             "date_utc": datetime.now(timezone.utc).isoformat(),
@@ -647,7 +674,7 @@ def train(config: DictConfig) -> None:
             "cuda_version": jax.devices()[0].client.platform_version,
             "jax_backend": jax.default_backend(),
             "visible_gpu_count": len(gpu_devices),
-            "jax_devices": [str(device) for device in gpu_devices],
+            "jax_devices": [str(device) for device in devices],
             "dtype": str(jax.config.jax_enable_x64 and np.dtype("float64") or np.dtype("float32")),
             "matmul_precision": str(config.matmul_precision),
             "frozen_hyperparameters": OmegaConf.to_container(config, resolve=True),

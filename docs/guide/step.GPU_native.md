@@ -65,6 +65,10 @@ num_envs = 10 × envs_per_preference_group
 
 每个 environment lane 固定属于一个 logical preference group；episode reset 时只从所属 preference subspace 重新采样 preference。GPU 数量不得改变 group 数量或 lane 到 group 的映射。
 
+**GPU-native 正式实验的总环境交互预算默认固定为 10,000,000 global valid transitions，增加 parallel env 数量不得自动扩大总预算。该预算包含 prefill 和训练期 base transitions，不包含 evaluation transitions 或 HER relabeled entries。正式配置必须保证剩余预算能被静态训练 chunk 整除，否则启动时直接报错。**
+
+**10 个 logical preference groups 与物理 sampling lanes 严格区分；`envs_per_preference_group` 只增加并行采样副本，不增加 PD-MORL preference groups。**
+
 新增完全 JIT 的 rollout block，使用 `jax.lax.scan` 一次执行 `rollout_length` 个环境步：
 
 ```text
@@ -86,7 +90,7 @@ HER 必须继续满足：
 
 - base transition 与 relabeled transition 的值和 shape 正确；
 - preference relabeling 不使用 Python transition 循环；
-- activation threshold 与 GPU-native transition 计数定义明确；
+- **第一版 HER warm-up 使用独立配置 `her_start_base_transitions`，按 global valid base transition count 定义，默认阈值为 100,000，不随 sampling lane 数自动放大；**
 - replay 中可以采样到所有 preference groups 的数据。
 
 ## 6. 阶段 4：最小 GPU learner 调度
@@ -110,7 +114,7 @@ replay_samples_per_transition
 
 改变 `num_envs`、`rollout_length` 或 batch size 时，不得忽略该比率的变化。最终参数不能只根据 transitions/s 决定，还必须比较学习曲线和达到目标 HV 的墙钟时间。
 
-Actor/target update 的节奏需在 GPU-native 配置中单独定义并记录。现有 faithful learner 的 update mask 和 optimizer 顺序不得改变。
+**第一版 actor/target delayed update 继续以 global critic optimizer step 为计数单位，并复用现有 `actor_update_interval` 表达原 `policy_freq`，避免同时引入额外调度变量。** 现有 faithful learner 的 update mask 和 optimizer 顺序不得改变。
 
 ## 7. 阶段 5：训练 chunk 与控制面边界
 
