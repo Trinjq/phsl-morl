@@ -252,17 +252,18 @@ def fast_eval_rollout_episode(
         transition, env_nstate = _eval_env_step(env_state, agent_state, current_key)
 
         prev_dones = env_state.done
+        active = 1 - prev_dones
+        while active.ndim < transition.rewards.ndim:
+            active = active[..., None]
 
         metrics = PyTreeDict(
             episode_returns=prev_metrics.episode_returns
-            + (1 - prev_dones) * transition.rewards,
+            + active * transition.rewards,
             episode_lengths=prev_metrics.episode_lengths
             + (1 - prev_dones).astype(jnp.int32),
         )
 
         return env_nstate, next_key, metrics
-
-    batch_shape = env_state.reward.shape
 
     env_state, _, metrics = jax.lax.while_loop(
         _terminate_cond,
@@ -271,8 +272,8 @@ def fast_eval_rollout_episode(
             env_state,
             key,
             PyTreeDict(
-                episode_returns=jnp.zeros(batch_shape),
-                episode_lengths=jnp.zeros(batch_shape, dtype=jnp.int32),
+                episode_returns=jnp.zeros_like(env_state.reward),
+                episode_lengths=jnp.zeros_like(env_state.done, dtype=jnp.int32),
             ),
         ),
     )

@@ -3,8 +3,6 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 import pytest
-from omegaconf import OmegaConf
-
 from evorl.algorithms.mo_td3 import (
     make_mo_td3_agent,
     parallel_actor_update_mask,
@@ -18,6 +16,7 @@ from evorl.rollout import rollout
 from evorl.sample_batch import SampleBatch
 from evorl.types import PyTreeDict
 from evorl.utils.rl_toolkits import flatten_rollout_trajectory
+from omegaconf import OmegaConf
 
 
 def _env_state(process_count):
@@ -202,6 +201,9 @@ def test_per_worker_random_action_warmup_boundary_jit():
     key = jax.random.PRNGKey(11)
     actions, extras = jax.jit(agent.compute_actions)(agent_state, batch, key)
     evaluated, _ = agent.evaluate_actions(agent_state, batch, key)
+    assert jnp.isfinite(evaluated).all()
+    assert jnp.all(evaluated >= action_space.low)
+    assert jnp.all(evaluated <= action_space.high)
     expected_policy = jnp.clip(evaluated, action_space.low, action_space.high)
     _, random_key = jax.random.split(key)
     expected_random = jax.random.uniform(

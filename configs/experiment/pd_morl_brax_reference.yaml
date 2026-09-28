@@ -1,0 +1,72 @@
+# @package _global_
+defaults:
+  - /logging
+  - /env: brax/walker2d
+  - /agent: mo-td3
+  - _self_
+
+seed: 42
+formal_reproduction: false
+enable_jit: true
+allow_cpu_smoke: false
+recorders: [log]
+output_dir: "outputs/pd_morl_brax_reference_1m"
+log_interval: 1000
+
+workflow_cls: evorl.algorithms.mo_td3.MOTD3Workflow
+matmul_precision: highest
+
+# 10 logical preference workers, 1 environment per worker
+process_count: 10
+envs_per_preference_group: 1
+num_envs: 10
+rollout_length: 1
+fold_iters: 1
+
+total_timesteps: 1000000
+random_timesteps: 1530
+learning_start_timesteps: 1530
+learner_start_replay_entries: 1536
+
+# Source-faithful replay batch and learner schedule
+replay_batch_size: 256
+batch_size: 256
+replay_buffer_capacity: 2000000
+
+reward_size: 2
+start_timesteps: 10000
+her_start_timesteps: 10000
+num_relabel_preferences: 3
+
+discount: 0.995
+tau: 0.005
+exploration_epsilon: 0.1
+policy_noise: 0.2
+clip_policy_noise: 0.5
+actor_update_interval: 10
+actor_loss_coeff: 10
+num_updates_per_iter: 1
+normalize_obs: false
+
+num_eval_envs: 10
+eval_episodes: 3
+eval_batch_size: 64
+run_final_evaluation: true
+
+agent_network:
+  critic_hidden_layer_sizes: [400, 400]
+  actor_hidden_layer_sizes: [400, 400]
+
+optimizer:
+  lr: 0.0003
+  grad_clip_norm: 100
+
+interpolator_artifact: configs/artifacts/interp_objs_walker2d.txt
+save_replay_buffer: false
+checkpoint:
+  enable: true
+  save_interval_steps: 100000
+  max_to_keep: 5
+
+env:
+  max_episode_steps: 500
