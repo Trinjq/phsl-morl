@@ -1,5 +1,6 @@
 import json
 import math
+import time
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from evorl.evaluators.pd_morl import (
     update_key_solutions,
 )
 from evorl.networks import MLP
+from evorl.recorders import add_prefix
 from evorl.replay_buffers import ReplayBuffer
 from evorl.replay_buffers.her import add_her_transitions
 from evorl.sample_batch import SampleBatch
@@ -121,6 +123,11 @@ def parallel_actor_update_mask(
     return update_ids % policy_freq == 0
 
 
+def periodic_update_count(start: int, count: int, interval: int) -> int:
+    """Count interval boundaries crossed by ``count`` consecutive updates."""
+    return (start + count) // interval - start // interval
+
+
 def select_warmup_actions(
     policy_actions: chex.Array,
     random_actions: chex.Array,
@@ -138,11 +145,7 @@ def completed_episodes_by_worker(dones: chex.Array, process_count: int) -> chex.
     dones = jnp.asarray(dones, dtype=jnp.uint32)
     if dones.ndim == 1:
         worker_ids = jnp.arange(dones.shape[0]) % process_count
-        return (
-            jnp.zeros((process_count,), dtype=jnp.uint32)
-            .at[worker_ids]
-            .add(dones)
-        )
+        return jnp.zeros((process_count,), dtype=jnp.uint32).at[worker_ids].add(dones)
     completed_per_lane = dones.sum(axis=0)
     worker_ids = jnp.arange(completed_per_lane.shape[0]) % process_count
     return (
@@ -349,9 +352,9 @@ class MOTD3Agent(TD3Agent):
         )
         projected_preference = self._project_preference(agent_state, preference)
         smooth_l1 = twin_smooth_l1_loss(q_values, q_target)
-        angles = directional_angle(
-            projected_preference[..., None, :], q_values
-        ).mean(axis=0)
+        angles = directional_angle(projected_preference[..., None, :], q_values).mean(
+            axis=0
+        )
         critic_loss = smooth_l1 + angles.sum()
         return PyTreeDict(
             critic_loss=critic_loss,
@@ -454,6 +457,50 @@ class MOTD3Workflow(TD3Workflow):
     critic_raw_grad_norm_key = "critic_raw_grad_norm"
     actor_raw_grad_norm_key = "actor_raw_grad_norm"
 
+    @staticmethod
+    def _load_configured_key_solutions(config, keys):
+        artifact_path = Path(config.interp_artifact_path)
+        if not artifact_path.is_absolute():
+            artifact_path = Path(__file__).parents[2] / artifact_path
+        brax_artifacts = {
+            "interp_objs_walker2d_brax.txt",
+            "interp_objs_walker2d_brax_legacy.txt",
+            "interp_objs_walker2d_brax_v2.txt",
+        }
+        if config.env.env_type == "brax" and artifact_path.name not in brax_artifacts:
+            raise ValueError(
+                "Brax PD-MORL runs must use a versioned "
+                "configs/artifacts/interp_objs_walker2d_brax artifact"
+            )
+        key_solutions, artifact = load_key_solution_artifact(artifact_path, keys)
+        print(f"[KeyArtifact] path={artifact.path}")
+        print(f"[KeyArtifact] sha256={artifact.sha256}")
+        print(f"[KeyArtifact] values=\n{key_solutions}")
+        return key_solutions, artifact
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.runtime_counters = {
+            "host_chunk_count": 0,
+            "inner_rollout_count": 0,
+            "environment_step_count": 0,
+            "critic_optimizer_step_count": 0,
+            "actor_optimizer_step_count": 0,
+            "target_update_count": 0,
+            "replay_sample_call_count": 0,
+            "key_evaluation_count": 0,
+            "key_replacement_count": 0,
+            "rbf_refit_count": 0,
+        }
+        self.runtime_timing = {"host_chunk_time": 0.0}
+
+    def setup(self, key: chex.PRNGKey) -> State:
+        state = super().setup(key)
+        self.runtime_counters["environment_step_count"] = int(
+            jax.device_get(state.metrics.sampled_timesteps)
+        )
+        return state
+
     @classmethod
     def name(cls):
         return "MO-TD3"
@@ -466,11 +513,8 @@ class MOTD3Workflow(TD3Workflow):
                 "source-faithful control requires rollout_length=1 and "
                 "num_envs=process_count"
             )
-        artifact_path = Path(config.interpolator_artifact)
-        if not artifact_path.is_absolute():
-            artifact_path = Path(__file__).parents[2] / artifact_path
         keys = key_preferences(config.reward_size)
-        key_solutions, artifact = load_key_solution_artifact(artifact_path, keys)
+        key_solutions, artifact = cls._load_configured_key_solutions(config, keys)
         interpolator_state = fit_interpolator_state(keys, key_solutions, "initial")
         env_kwargs = {
             "episode_length": config.env.max_episode_steps,
@@ -639,6 +683,8 @@ class MOTD3Workflow(TD3Workflow):
 
         if key_update_due(episode_count, int(jax.device_get(extra.eval_cnt_ep))):
             eval_cnt_ep = extra.eval_cnt_ep + jnp.uint32(1)
+            self.runtime_counters["key_evaluation_count"] += 1
+            self.runtime_counters["rbf_refit_count"] += 1
             state = state.replace(
                 agent_state=state.agent_state.replace(
                     extra_state=extra.replace(eval_cnt_ep=eval_cnt_ep)
@@ -661,10 +707,12 @@ class MOTD3Workflow(TD3Workflow):
             state = state.replace(
                 agent_state=state.agent_state.replace(extra_state=extra)
             )
-            control_metrics["control/key_replacements"] = int(improved.sum())
-            self.key_replacement_count = getattr(self, "key_replacement_count", 0) + int(
-                improved.sum()
+            num_replacements = int(improved.sum())
+            control_metrics["control/key_replacements"] = num_replacements
+            self.key_replacement_count = (
+                getattr(self, "key_replacement_count", 0) + num_replacements
             )
+            self.runtime_counters["key_replacement_count"] += num_replacements
 
         extra = state.agent_state.extra_state
         if full_evaluation_due(
@@ -680,7 +728,10 @@ class MOTD3Workflow(TD3Workflow):
                 state.agent_state, preference_grid(0.005), repeats=3
             )
             self._write_evaluation_snapshot(
-                "training_full", result, int(jax.device_get(state.metrics.iterations))
+                "training_full",
+                result,
+                int(jax.device_get(state.metrics.iterations)),
+                sampled_timesteps=int(jax.device_get(state.metrics.sampled_timesteps)),
             )
             control_metrics.update(
                 {
@@ -700,20 +751,15 @@ class MOTD3Workflow(TD3Workflow):
         her_threshold = self._her_base_transition_threshold()
         worker_steps_arr = np.asarray(
             jax.device_get(state.agent_state.extra_state.worker_steps)
-        )
+        ).astype(np.int64)
         warmup_limit = int(self.config.start_timesteps)
         random_counts = np.minimum(worker_steps_arr, warmup_limit)
         policy_counts = np.maximum(worker_steps_arr - warmup_limit, 0)
         payload = {
             "iteration": int(iteration),
-            **{
-                key: np.asarray(value).tolist()
-                for key, value in raw.items()
-            },
+            **{key: np.asarray(value).tolist() for key, value in raw.items()},
             "finite": bool(finite),
-            "replay_size": int(
-                jax.device_get(state.replay_buffer_state.buffer_size)
-            ),
+            "replay_size": int(jax.device_get(state.replay_buffer_state.buffer_size)),
             "base_inserts": sampled,
             "her_inserts": max(sampled - her_threshold, 0)
             * int(self.config.num_relabel_preferences),
@@ -749,19 +795,22 @@ class MOTD3Workflow(TD3Workflow):
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload) + "\n")
 
-    def _write_evaluation_snapshot(self, kind, result, iteration):
+    def _write_evaluation_snapshot(
+        self, kind, result, iteration, *, sampled_timesteps=None
+    ):
         """Persist HV/Pareto progression without changing learner state."""
         path = Path(self.config.output_dir) / "pd_morl_evaluations.jsonl"
         mean_returns = np.asarray(result.mean_returns)
         obj_stats = {}
         for l in range(mean_returns.shape[-1]):
-            obj_stats[f"obj{l+1}_min"] = float(mean_returns[:, l].min())
-            obj_stats[f"obj{l+1}_max"] = float(mean_returns[:, l].max())
-            obj_stats[f"obj{l+1}_mean"] = float(mean_returns[:, l].mean())
+            obj_stats[f"obj{l + 1}_min"] = float(mean_returns[:, l].min())
+            obj_stats[f"obj{l + 1}_max"] = float(mean_returns[:, l].max())
+            obj_stats[f"obj{l + 1}_mean"] = float(mean_returns[:, l].mean())
 
         pareto_counts = (
             result.pareto_counts_per_repeat.tolist()
-            if hasattr(result, "pareto_counts_per_repeat") and len(result.pareto_counts_per_repeat) > 0
+            if hasattr(result, "pareto_counts_per_repeat")
+            and len(result.pareto_counts_per_repeat) > 0
             else [len(result.pareto_returns)] * len(result.hv_per_repeat)
         )
         mean_pareto_count = (
@@ -775,15 +824,29 @@ class MOTD3Workflow(TD3Workflow):
         ]
 
         source_hv = float(getattr(result, "source_hv", result.mean_hv))
-        source_sparsity = float(getattr(result, "source_sparsity", result.mean_sparsity))
-        source_count = int(getattr(result, "source_pareto_point_count", len(result.pareto_returns)))
+        source_sparsity = float(
+            getattr(result, "source_sparsity", result.mean_sparsity)
+        )
+        source_count = int(
+            getattr(result, "source_pareto_point_count", len(result.pareto_returns))
+        )
         mean_rep_hv = float(getattr(result, "mean_repeat_hv", result.mean_hv))
-        mean_rep_sp = float(getattr(result, "mean_repeat_sparsity", result.mean_sparsity))
-        mean_rep_cnt = float(getattr(result, "mean_repeat_pareto_count", mean_pareto_count))
+        mean_rep_sp = float(
+            getattr(result, "mean_repeat_sparsity", result.mean_sparsity)
+        )
+        mean_rep_cnt = float(
+            getattr(result, "mean_repeat_pareto_count", mean_pareto_count)
+        )
 
         payload = {
             "kind": kind,
             "iteration": int(iteration),
+            "environment_transitions": sampled_timesteps,
+            "wall_clock_seconds": (
+                time.perf_counter() - self._learning_started_at
+                if hasattr(self, "_learning_started_at")
+                else None
+            ),
             "source_hv": source_hv,
             "source_sparsity": source_sparsity,
             "source_pareto_point_count": source_count,
@@ -813,8 +876,14 @@ class MOTD3Workflow(TD3Workflow):
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload) + "\n")
         if kind == "training_final":
-            target = Path(self.config.output_dir) / "final_training_eval" / "results.json"
-            npz_target = Path(self.config.output_dir) / "final_training_eval" / "pareto_artifacts.npz"
+            target = (
+                Path(self.config.output_dir) / "final_training_eval" / "results.json"
+            )
+            npz_target = (
+                Path(self.config.output_dir)
+                / "final_training_eval"
+                / "pareto_artifacts.npz"
+            )
             npz_target.parent.mkdir(parents=True, exist_ok=True)
             np.savez_compressed(
                 npz_target,
@@ -859,7 +928,12 @@ class MOTD3Workflow(TD3Workflow):
                 state.agent_state, preference_grid(0.001), repeats=3
             )
             iterations = int(jax.device_get(state.metrics.iterations))
-            self._write_evaluation_snapshot("training_final", result, iterations)
+            self._write_evaluation_snapshot(
+                "training_final",
+                result,
+                iterations,
+                sampled_timesteps=int(jax.device_get(state.metrics.sampled_timesteps)),
+            )
             self.recorder.write(
                 {
                     "eval/final_hypervolume": result.mean_hv,
@@ -872,7 +946,10 @@ class MOTD3Workflow(TD3Workflow):
             iterations = int(jax.device_get(state.metrics.iterations))
 
         saved_state = state
-        if hasattr(self.config, "save_replay_buffer") and not self.config.save_replay_buffer:
+        if (
+            hasattr(self.config, "save_replay_buffer")
+            and not self.config.save_replay_buffer
+        ):
             saved_state = skip_replay_buffer_state(saved_state)
         if self.checkpoint_manager.latest_step() != iterations:
             self.checkpoint_manager.save(iterations, saved_state, force=True)
@@ -894,6 +971,124 @@ class MOTD3Workflow(TD3Workflow):
             actor_angle=zero,
             actor_raw_grad_norm=zero,
         )
+
+    def learn(self, state: State) -> State:
+        self._learning_started_at = time.perf_counter()
+        num_devices = jax.device_count()
+        one_step_timesteps = self.config.rollout_length * self.config.num_envs
+        sampled_timesteps = state.metrics.sampled_timesteps.tolist()
+        num_iters = math.ceil(
+            (self.config.total_timesteps - sampled_timesteps)
+            / (one_step_timesteps * self.config.fold_iters * num_devices)
+        )
+        start_iteration = state.metrics.iterations.tolist()
+        final_iteration = num_iters + start_iteration
+
+        fold_iters = int(self.config.fold_iters)
+        critic_per_rollout = int(self._critic_updates_per_rollout())
+        actor_update_interval = int(self.config.actor_update_interval)
+
+        for i in range(num_iters):
+            self.runtime_counters["host_chunk_count"] += 1
+            chunk_started_at = time.perf_counter()
+            train_metrics, state = self._multi_steps(state)
+            jax.block_until_ready(state.agent_state.params)
+            self.runtime_timing["host_chunk_time"] += (
+                time.perf_counter() - chunk_started_at
+            )
+            self.last_train_metrics = train_metrics
+
+            self.runtime_counters["inner_rollout_count"] += fold_iters
+            self.runtime_counters["environment_step_count"] += int(
+                fold_iters * self.config.rollout_length * self.config.num_envs
+            )
+            critic_before = self.runtime_counters["critic_optimizer_step_count"]
+            critic_after = critic_before + fold_iters * critic_per_rollout
+            actor_updates = periodic_update_count(
+                critic_before, fold_iters * critic_per_rollout, actor_update_interval
+            )
+            self.runtime_counters["critic_optimizer_step_count"] = critic_after
+            self.runtime_counters["replay_sample_call_count"] += (
+                fold_iters * critic_per_rollout
+            )
+            self.runtime_counters["actor_optimizer_step_count"] += actor_updates
+            self.runtime_counters["target_update_count"] += actor_updates
+
+            state, control_metrics = self._after_multi_steps(state)
+            workflow_metrics = state.metrics
+
+            iterations = state.metrics.iterations.tolist()
+            if (
+                iterations % int(self.config.get("log_interval", 1)) == 0
+                or iterations == final_iteration
+            ):
+                train_metrics_dict = train_metrics.to_local_dict()
+                workflow_metrics_dict = workflow_metrics.to_local_dict()
+                counter_metrics = {
+                    f"counters/{k}": v for k, v in self.runtime_counters.items()
+                }
+                self.recorder.write(train_metrics_dict, iterations)
+                self.recorder.write(workflow_metrics_dict, iterations)
+                self.recorder.write(counter_metrics, iterations)
+                observe = getattr(self, "_observe_diagnostics", None)
+                if observe is not None:
+                    observe(iterations, train_metrics_dict, state)
+            if control_metrics:
+                self.recorder.write(control_metrics, iterations)
+
+            if self._periodic_evaluation_due(iterations, final_iteration):
+                eval_metrics, state = self.evaluate(state)
+                self.recorder.write(
+                    add_prefix(eval_metrics.to_local_dict(), "eval"), iterations
+                )
+
+            saved_state = state
+            if not self.config.save_replay_buffer:
+                saved_state = skip_replay_buffer_state(saved_state)
+            self.checkpoint_manager.save(
+                iterations, saved_state, force=iterations == final_iteration
+            )
+
+        summary_path = Path(self.config.output_dir) / "counters_summary.json"
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_payload = {
+            **self.runtime_counters,
+            "timing": {
+                **self.runtime_timing,
+                "transitions_per_host_chunk": int(
+                    self.config.num_envs
+                    * self.config.rollout_length
+                    * self.config.fold_iters
+                ),
+                "total_measured_transitions": int(
+                    self.runtime_counters["host_chunk_count"]
+                    * self.config.num_envs
+                    * self.config.rollout_length
+                    * self.config.fold_iters
+                ),
+                "steady_state_transitions_per_second": (
+                    self.runtime_counters["host_chunk_count"]
+                    * self.config.num_envs
+                    * self.config.rollout_length
+                    * self.config.fold_iters
+                    / self.runtime_timing["host_chunk_time"]
+                ),
+            },
+            "derived_verification": {
+                "expected_critic_steps_from_rollouts": self.runtime_counters[
+                    "inner_rollout_count"
+                ]
+                * critic_per_rollout,
+                "matches_critic_optimizer_steps": (
+                    self.runtime_counters["inner_rollout_count"] * critic_per_rollout
+                    == self.runtime_counters["critic_optimizer_step_count"]
+                ),
+                "deprecated_alias_62240_explained": "Erroneous alias 62,240 was produced by double-multiplying inner_rollouts (1556) by fold_iters * K (40). The real physical optimizer count is 15,560.",
+            },
+        }
+        summary_path.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
+
+        return self._after_learning(state)
 
 
 class PDMORLGPUWorkflow(MOTD3Workflow):
@@ -918,16 +1113,15 @@ class PDMORLGPUWorkflow(MOTD3Workflow):
             raise ValueError("critic_updates_per_rollout must be positive")
         if config.random_timesteps > config.learning_start_timesteps:
             raise ValueError("random_timesteps cannot exceed learning_start_timesteps")
-        random_prefill = (
-            config.random_timesteps // config.num_envs
-        ) * config.num_envs
-        policy_prefill = math.ceil(
-            (config.learning_start_timesteps - random_prefill) / config.num_envs
-        ) * config.num_envs
-        prefill_transitions = random_prefill + policy_prefill
-        chunk_transitions = (
-            config.num_envs * config.rollout_length * config.fold_iters
+        random_prefill = (config.random_timesteps // config.num_envs) * config.num_envs
+        policy_prefill = (
+            math.ceil(
+                (config.learning_start_timesteps - random_prefill) / config.num_envs
+            )
+            * config.num_envs
         )
+        prefill_transitions = random_prefill + policy_prefill
+        chunk_transitions = config.num_envs * config.rollout_length * config.fold_iters
         remaining = config.total_timesteps - prefill_transitions
         if remaining < 0 or remaining % chunk_transitions:
             raise ValueError(
@@ -937,11 +1131,8 @@ class PDMORLGPUWorkflow(MOTD3Workflow):
                 f"chunk={chunk_transitions}"
             )
 
-        artifact_path = Path(config.interpolator_artifact)
-        if not artifact_path.is_absolute():
-            artifact_path = Path(__file__).parents[2] / artifact_path
         keys = key_preferences(config.reward_size)
-        key_solutions, artifact = load_key_solution_artifact(artifact_path, keys)
+        key_solutions, artifact = cls._load_configured_key_solutions(config, keys)
         interpolator_state = fit_interpolator_state(keys, key_solutions, "initial")
 
         env_kwargs = {

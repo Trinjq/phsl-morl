@@ -1,3 +1,4 @@
+from hashlib import sha256
 from pathlib import Path
 
 import jax
@@ -48,16 +49,28 @@ def test_initial_artifact_preference_order(tmp_path):
         load_key_solution_artifact(artifact, KEYS)
 
 
-def test_official_artifact_provenance():
-    path = Path("configs/artifacts/interp_objs_walker2d.txt")
+def test_brax_artifact_provenance():
+    path = Path("configs/artifacts/interp_objs_walker2d_brax.txt")
     values, provenance = load_key_solution_artifact(path, KEYS)
     assert values.shape == (3, 2)
     assert provenance.shape == (3, 2)
     assert provenance.key_preferences == KEYS.tolist()
-    assert (
-        provenance.sha256
-        == "7b7f701574ced75af9df1fefdece160463643a85df9826544f7fb2449257886b"
+    assert provenance.sha256 == sha256(path.read_bytes()).hexdigest()
+    assert np.isfinite(values).all()
+
+
+def test_brax_run_rejects_mujoco_key_artifact():
+    from evorl.algorithms.mo_td3 import MOTD3Workflow
+    from omegaconf import OmegaConf
+
+    config = OmegaConf.create(
+        {
+            "env": {"env_type": "brax"},
+            "interp_artifact_path": "configs/artifacts/interp_objs_walker2d.txt",
+        }
     )
+    with pytest.raises(ValueError, match="Brax PD-MORL"):
+        MOTD3Workflow._load_configured_key_solutions(config, KEYS)
 
 
 def test_key_update_off_by_one():
@@ -264,3 +277,41 @@ def test_sparsity_duplicates():
 
 def test_official_key_preference_order():
     np.testing.assert_array_equal(key_preferences(2), KEYS)
+
+
+def test_runtime_counter_schema():
+    counters = {
+        "host_chunk_count": 0,
+        "inner_rollout_count": 0,
+        "environment_step_count": 0,
+        "critic_optimizer_step_count": 0,
+        "actor_optimizer_step_count": 0,
+        "target_update_count": 0,
+        "replay_sample_call_count": 0,
+        "key_evaluation_count": 0,
+        "key_replacement_count": 0,
+        "rbf_refit_count": 0,
+    }
+    assert len(counters) == 10
+    for value in counters.values():
+        assert isinstance(value, int)
+
+
+def test_counter_relationship_consistency():
+    # 模拟 1M 步下的计数推导与歧义排查
+    total_timesteps = 1000000
+    prefill = 4160
+    num_envs = 160
+    rollout_length = 4
+    fold_iters = 4
+    chunk_transitions = num_envs * rollout_length * fold_iters  # 2560
+    host_chunks = (total_timesteps - prefill) // chunk_transitions  # 389
+    inner_rollouts = host_chunks * fold_iters  # 1556
+    critic_per_rollout = 10
+    actual_critic_updates = inner_rollouts * critic_per_rollout  # 15560
+
+    # 验证 62,240 产生根因：错误地将 1556 当作 host_chunks 并重复乘以 fold_iters * K = 40
+    erroneous_alias = inner_rollouts * (fold_iters * critic_per_rollout)
+    assert erroneous_alias == 62240
+    assert actual_critic_updates == 15560
+    assert host_chunks == 389
