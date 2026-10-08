@@ -21,7 +21,7 @@ from evorl.evaluators.pd_morl import (
     key_update_due,
     load_key_solution_artifact,
     preference_grid,
-    update_key_solutions,
+    update_key_solutions_jax,
 )
 from evorl.networks import MLP
 from evorl.recorders import add_prefix
@@ -690,18 +690,19 @@ class MOTD3Workflow(TD3Workflow):
                     extra_state=extra.replace(eval_cnt_ep=eval_cnt_ep)
                 )
             )
-            key_result = self.morl_evaluator.evaluate(
-                state.agent_state,
-                key_preferences(self.config.reward_size),
-                repeats=3,
+            key_returns = self.morl_evaluator.evaluate_keys_device(
+                state.agent_state, repeats=3
             )
-            solutions, improved, interpolator = update_key_solutions(
-                np.asarray(jax.device_get(extra.raw_key_solutions)),
-                key_result.returns_per_repeat,
-                key_preferences(self.config.reward_size),
+            solutions, improved, interpolator = update_key_solutions_jax(
+                extra.raw_key_solutions,
+                key_returns,
+                jnp.asarray(
+                    key_preferences(self.config.reward_size),
+                    dtype=extra.raw_key_solutions.dtype,
+                ),
             )
             extra = state.agent_state.extra_state.replace(
-                raw_key_solutions=jnp.asarray(solutions, dtype=jnp.float32),
+                raw_key_solutions=solutions,
                 interpolator=interpolator,
             )
             state = state.replace(

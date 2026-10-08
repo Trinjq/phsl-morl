@@ -11,10 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import jax
 import numpy as np
+from scipy.interpolate import RBFInterpolator
 
 from evorl.utils.pd_morl_interpolator import (
     fit_interpolator_state,
-    fit_reference_interpolator,
     interpolate,
     key_preferences,
     normalize_key_solutions,
@@ -64,7 +64,13 @@ def validate(artifact_path: Path, metadata_path: Path) -> dict:
     checks = {}
     keys = key_preferences(2)
     for normalization in ("initial", "online"):
-        reference = fit_reference_interpolator(keys, artifact, normalization)
+        reference = RBFInterpolator(
+            keys,
+            np.asarray(normalize_key_solutions(artifact, normalization)),
+            kernel="linear",
+            smoothing=0,
+            degree=0,
+        )
         state = fit_interpolator_state(keys, artifact, normalization)
         np.testing.assert_allclose(reference(keys), normalize_key_solutions(artifact, normalization))
         np.testing.assert_allclose(

@@ -1,10 +1,9 @@
-"""PD-MORL's host-fitted linear RBF interpolator with a pure JAX forward."""
+"""PD-MORL's pure-JAX linear RBF interpolator."""
 
 from typing import Literal
 
 import jax.numpy as jnp
 import numpy as np
-from scipy.interpolate import RBFInterpolator
 
 from evorl.types import PyTreeData
 
@@ -12,7 +11,7 @@ Normalization = Literal["initial", "online"]
 
 
 class PDMORLInterpolatorState(PyTreeData):
-    """Fixed-shape arrays needed to evaluate SciPy's linear RBF fit."""
+    """Fixed-shape arrays needed to evaluate a degree-zero linear RBF fit."""
 
     key_preferences: jnp.ndarray
     normalized_key_solutions: jnp.ndarray
@@ -34,58 +33,60 @@ def key_preferences(num_objectives: int) -> np.ndarray:
 
 
 def normalize_key_solutions(
-    key_solutions: np.ndarray, normalization: Normalization
-) -> np.ndarray:
-    """Apply the source's initial L2 or online-update L1 normalization."""
-    solutions = np.asarray(key_solutions, dtype=np.float64)
+    key_solutions: jnp.ndarray, normalization: Normalization
+) -> jnp.ndarray:
+    """Normalize each raw key return with the objective-vector L2 norm."""
+    if normalization not in ("initial", "online"):
+        raise ValueError("normalization must be 'initial' or 'online'")
+    solutions = jnp.asarray(key_solutions)
     if solutions.ndim != 2:
         raise ValueError("key_solutions must have shape [K, L]")
-    order = (
-        2 if normalization == "initial" else 1 if normalization == "online" else None
-    )
-    if order is None:
-        raise ValueError("normalization must be 'initial' or 'online'")
-    norms = np.linalg.norm(solutions, ord=order, axis=1, keepdims=True)
-    # ponytail: preserve zero fixtures; reject/replace them if training artifacts need it.
-    return solutions / np.where(norms == 0, 1.0, norms)
-
-
-def fit_reference_interpolator(
-    keys: np.ndarray,
-    key_solutions: np.ndarray,
-    normalization: Normalization,
-) -> RBFInterpolator:
-    """Fit the exact host-side interpolator used by the official source."""
-    keys = np.asarray(keys, dtype=np.float64)
-    targets = normalize_key_solutions(key_solutions, normalization)
-    if keys.ndim != 2 or keys.shape != targets.shape:
-        raise ValueError("keys and key_solutions must share shape [K, L]")
-    return RBFInterpolator(keys, targets, kernel="linear")
+    norms = jnp.linalg.norm(solutions, ord=2, axis=1, keepdims=True)
+    return solutions / jnp.where(norms > 0, norms, 1)
 
 
 def fit_interpolator_state(
-    keys: np.ndarray,
-    key_solutions: np.ndarray,
+    keys: jnp.ndarray,
+    key_solutions: jnp.ndarray,
     normalization: Normalization,
     *,
-    dtype=np.float32,
+    dtype=jnp.float32,
 ) -> PDMORLInterpolatorState:
-    """Fit on the host and copy only fixed-shape numerical state to JAX."""
-    reference = fit_reference_interpolator(keys, key_solutions, normalization)
-    to_jax = lambda value: jnp.asarray(value, dtype=dtype)
+    """Fit linear, smoothing-zero, degree-zero RBF system in JAX."""
+    keys = jnp.asarray(keys, dtype=dtype)
+    key_solutions = jnp.asarray(key_solutions, dtype=dtype)
+    if keys.ndim != 2 or key_solutions.ndim != 2 or keys.shape != key_solutions.shape:
+        raise ValueError("keys and key_solutions must share shape [K, L]")
+
+    targets = normalize_key_solutions(key_solutions, normalization)
+    distances = jnp.linalg.norm(keys[:, None, :] - keys[None, :, :], axis=-1)
+    phi = -distances
+    polynomial = jnp.ones((keys.shape[0], 1), dtype=dtype)
+    zero = jnp.zeros((1, 1), dtype=dtype)
+    system = jnp.concatenate(
+        (
+            jnp.concatenate((phi, polynomial), axis=1),
+            jnp.concatenate((polynomial.T, zero), axis=1),
+        ),
+        axis=0,
+    )
+    rhs = jnp.concatenate(
+        (targets, jnp.zeros((1, key_solutions.shape[1]), dtype=dtype)), axis=0
+    )
+    coefficients = jnp.linalg.solve(system, rhs)
     return PDMORLInterpolatorState(
-        key_preferences=to_jax(reference.y),
-        normalized_key_solutions=to_jax(reference.d),
-        coefficients=to_jax(reference._coeffs),
-        shift=to_jax(reference._shift),
-        scale=to_jax(reference._scale),
-        powers=jnp.asarray(reference.powers, dtype=jnp.int32),
-        epsilon=to_jax(reference.epsilon),
+        key_preferences=keys,
+        normalized_key_solutions=targets,
+        coefficients=coefficients,
+        shift=jnp.zeros((keys.shape[1],), dtype=dtype),
+        scale=jnp.ones((keys.shape[1],), dtype=dtype),
+        powers=jnp.zeros((1, keys.shape[1]), dtype=jnp.int32),
+        epsilon=jnp.asarray(1, dtype=dtype),
     )
 
 
 def interpolate(state: PDMORLInterpolatorState, preference: jnp.ndarray) -> jnp.ndarray:
-    """Evaluate ``I(w)`` for one ``[L]`` input or a batch ``[..., L]``."""
+    """Evaluate the interpolator for one [L] input or a batch [..., L]."""
     preference = jnp.asarray(preference)
     radial = -state.epsilon * jnp.linalg.norm(
         preference[..., None, :] - state.key_preferences, axis=-1

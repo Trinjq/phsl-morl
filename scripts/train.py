@@ -654,6 +654,9 @@ def train(config: DictConfig) -> None:
             ).strip()
         except (FileNotFoundError, subprocess.CalledProcessError):
             git_commit = str(config.get("source_git_commit", "unavailable"))
+        artifact_path = Path(config.interp_artifact_path)
+        if not artifact_path.is_absolute():
+            artifact_path = Path(__file__).parents[1] / artifact_path
         metadata = {
             "algorithm": "PD-MORL",
             "training_seed": int(config.seed),
@@ -664,6 +667,10 @@ def train(config: DictConfig) -> None:
                 if "PDMORLGPUWorkflow" in str(config.workflow_cls)
                 else "source-faithful PD-MORL reproduction with Brax environment adaptation"
             ),
+            "interpolator_backend": "jax",
+            "key_objective_normalization": "l2",
+            "key_artifact_path": str(artifact_path.resolve()),
+            "key_artifact_sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
             "git_commit": git_commit,
             "runtime_source_sha256": _source_fingerprint(),
             "date_utc": datetime.now(timezone.utc).isoformat(),
