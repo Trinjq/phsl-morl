@@ -55,7 +55,8 @@ def replay_next_obs_and_done(trajectory, obs_dim):
     done = jnp.maximum(extras.termination, extras.truncation).reshape(-1)
     return next_obs, done
 
-def train_single_key(preference,seed_val):
+def train_single_key(preference,seed_val,source_like=False):
+    eval_episode_count=10 if source_like else eval_episodes
     w_np=np.asarray(preference,dtype=np.float32)
     w=jnp.asarray(w_np)
     rng=jax.random.PRNGKey(seed_val)
@@ -75,7 +76,7 @@ def train_single_key(preference,seed_val):
     eval_env=create_wrapped_brax_env(
         "walker2d",
         episode_length=horizon,
-        parallel=eval_episodes,
+        parallel=eval_episode_count,
         autoreset_mode=AutoresetMode.DISABLED,
         vector_reward=True,
     )
@@ -106,20 +107,32 @@ def train_single_key(preference,seed_val):
         rewards=jnp.zeros((reward_size,)),
         dones=jnp.zeros(()),
         next_obs=dummy_obs,
+        extras=PyTreeDict(preference=w),
     )
     rb_state=rb.init(dummy_batch)
 
     # 动作函数
+    def sampled_preference(k,shape):
+        if not source_like:
+            return jnp.broadcast_to(w,(*shape,reward_size))
+        noise=jnp.clip(jax.random.normal(k,(*shape,reward_size))*0.05,-0.05,0.05)
+        noisy=w+noise
+        return noisy/jnp.sum(jnp.abs(noisy),axis=-1,keepdims=True)
+
     def warmup_action_fn(_params,state_batch,k):
         obs=state_batch.obs
-        return jax.random.uniform(k,(*obs.shape[:-1],act_dim),minval=-1.0,maxval=1.0),PyTreeDict()
+        ka,kp=jax.random.split(k)
+        pref=sampled_preference(kp,obs.shape[:-1])
+        action=jax.random.uniform(ka,(*obs.shape[:-1],act_dim),minval=-1.0,maxval=1.0)
+        return action,PyTreeDict(preference=pref)
 
     def train_action_fn(params,state_batch,k):
         obs=state_batch.obs
-        w_b=jnp.broadcast_to(w,(*obs.shape[:-1],reward_size))
-        a=actor.apply(params,obs,w_b)
-        noise=jax.random.normal(k,a.shape)*expl_noise
-        return jnp.clip(a+noise,-1.0,1.0),PyTreeDict()
+        ka,kp=jax.random.split(k)
+        pref=sampled_preference(kp,obs.shape[:-1])
+        a=actor.apply(params,obs,pref)
+        noise=jax.random.normal(ka,a.shape)*expl_noise
+        return jnp.clip(a+noise,-1.0,1.0),PyTreeDict(preference=pref)
 
     def eval_action_fn(params,state_batch,k):
         obs=state_batch.obs
@@ -127,13 +140,13 @@ def train_single_key(preference,seed_val):
         return actor.apply(params,obs,w_b),PyTreeDict()
 
     # 训练 Chunk（支持区分 warmup 与 policy update）
-    def make_train_chunk(is_warmup):
+    def make_train_chunk(random_actions,do_updates):
         @jax.jit
         def train_chunk(carry,unused):
             (k,env_s,ap,cp,tap,tcp,ap_opt,cp_opt,rb_s,it)=carry
             k,kr,ku=jax.random.split(k,3)
 
-            action_fn=warmup_action_fn if is_warmup else lambda _s,sb,rk:train_action_fn(ap,sb,rk)
+            action_fn=warmup_action_fn if random_actions else lambda _s,sb,rk:train_action_fn(ap,sb,rk)
 
             traj,env_s=rollout(
                 env_fn=train_env.step,
@@ -148,6 +161,7 @@ def train_single_key(preference,seed_val):
             flat_obs=traj.obs.reshape(-1,obs_dim)
             flat_act=traj.actions.reshape(-1,act_dim)
             flat_rew=traj.rewards.reshape(-1,reward_size)
+            flat_pref=traj.extras.policy_extras.preference.reshape(-1,reward_size)
             flat_next_obs,flat_done=replay_next_obs_and_done(traj,obs_dim)
 
             batch_to_add=SampleBatch(
@@ -156,17 +170,19 @@ def train_single_key(preference,seed_val):
                 rewards=flat_rew,
                 dones=flat_done,
                 next_obs=flat_next_obs,
+                extras=PyTreeDict(preference=flat_pref),
             )
             rb_s=rb.add(rb_s,batch_to_add)
 
-            if is_warmup:
-                return (k,env_s,ap,cp,tap,tcp,ap_opt,cp_opt,rb_s,it),None
+            completed_episodes=jnp.sum(traj.dones,dtype=jnp.uint32)
+            if not do_updates:
+                return (k,env_s,ap,cp,tap,tcp,ap_opt,cp_opt,rb_s,it),completed_episodes
 
             def update_step(inner_carry,ukey):
                 cur_cp,cur_cp_opt,cur_ap,cur_ap_opt,cur_tap,cur_tcp,cur_it=inner_carry
                 ukey,ks,kn=jax.random.split(ukey,3)
                 sample=rb.sample(rb_s,ks)
-                w_b=jnp.broadcast_to(w,(batch_size,reward_size))
+                w_b=sample.extras.preference
 
                 next_act=actor.apply(cur_tap,sample.next_obs,w_b)
                 act_noise=jnp.clip(jax.random.normal(kn,next_act.shape)*policy_noise,-noise_clip,noise_clip)
@@ -220,12 +236,12 @@ def train_single_key(preference,seed_val):
             init_inner=(cp,cp_opt,ap,ap_opt,tap,tcp,it)
             update_keys=jax.random.split(ku,updates_per_chunk)
             (cp,cp_opt,ap,ap_opt,tap,tcp,it),_=jax.lax.scan(update_step,init_inner,update_keys)
-            return (k,env_s,ap,cp,tap,tcp,ap_opt,cp_opt,rb_s,it),None
+            return (k,env_s,ap,cp,tap,tcp,ap_opt,cp_opt,rb_s,it),completed_episodes
 
         return train_chunk
 
-    warmup_chunk=make_train_chunk(is_warmup=True)
-    learn_chunk=make_train_chunk(is_warmup=False)
+    warmup_chunk=make_train_chunk(random_actions=True,do_updates=source_like)
+    learn_chunk=make_train_chunk(random_actions=False,do_updates=True)
 
     # 评估函数
     @jax.jit
@@ -258,54 +274,91 @@ def train_single_key(preference,seed_val):
 
     best_scalar=-1e9
     best_vec_return=np.zeros((reward_size,),dtype=np.float64)
+    best_std_return=np.zeros((reward_size,),dtype=np.float64)
+    best_step=0
+    evaluation_history=[]
     start_t=time.time()
 
-    # 1. Warm-up 阶段
-    print(f"Running Warm-up ({warmup_steps} steps)...",flush=True)
-    carry,_=jax.lax.scan(warmup_chunk,carry,None,length=warmup_chunks)
-    print("Warm-up complete. Starting policy learning...",flush=True)
-
-    # 2. 学习与评估阶段
-    learning_chunks=total_chunks-warmup_chunks
-    chunks_done=0
-    round_index=0
-
-    while chunks_done<learning_chunks:
-        chunk_count=min(eval_chunk_freq,learning_chunks-chunks_done)
-        carry,_=jax.lax.scan(learn_chunk,carry,None,length=chunk_count)
-        chunks_done+=chunk_count
-        curr_steps=warmup_steps+chunks_done*step_chunk_trans
-
-        # 评估
-        k_eval=jax.random.fold_in(rng,round_index+100)
+    def record_evaluation(curr_steps,round_index,completed_episodes=None):
+        nonlocal best_scalar,best_vec_return,best_std_return,best_step
+        k_eval=jax.random.PRNGKey(0) if source_like else jax.random.fold_in(rng,round_index+100)
         mean_r,std_r,sc_r=evaluate(carry[2],k_eval)
         mean_r_np=np.asarray(mean_r)
         std_r_np=np.asarray(std_r)
         sc_r_val=float(sc_r)
-
         if sc_r_val>best_scalar:
             best_scalar=sc_r_val
             best_vec_return=mean_r_np
-
+            best_std_return=std_r_np
+            best_step=curr_steps
+        record={
+            "step":int(curr_steps),
+            "mean_vector_return":mean_r_np.astype(np.float64).tolist(),
+            "std_vector_return":std_r_np.astype(np.float64).tolist(),
+            "scalarized_return":sc_r_val,
+        }
+        if completed_episodes is not None:
+            record["completed_episodes"]=int(completed_episodes)
+        evaluation_history.append(record)
         print(f"Steps {curr_steps:6d}/{total_env_steps}: Return={np.round(mean_r_np,2)}, Std={np.round(std_r_np,2)}, Scalar={sc_r_val:6.2f}, Best={best_scalar:6.2f}",flush=True)
-        round_index+=1
+
+    if source_like:
+        completed_episodes=0
+        next_evaluation_episode=100
+        round_index=0
+        for chunk_index in range(total_chunks):
+            chunk_fn=warmup_chunk if chunk_index<warmup_chunks else learn_chunk
+            carry,completed=jax.lax.scan(chunk_fn,carry,None,length=1)
+            completed_episodes+=int(np.asarray(completed).sum())
+            if completed_episodes>=next_evaluation_episode:
+                record_evaluation((chunk_index+1)*step_chunk_trans,round_index,completed_episodes)
+                next_evaluation_episode+=100
+                round_index+=1
+    else:
+        print(f"Running Warm-up ({warmup_steps} steps)...",flush=True)
+        carry,_=jax.lax.scan(warmup_chunk,carry,None,length=warmup_chunks)
+        print("Warm-up complete. Starting policy learning...",flush=True)
+        learning_chunks=total_chunks-warmup_chunks
+        chunks_done=0
+        round_index=0
+        while chunks_done<learning_chunks:
+            chunk_count=min(eval_chunk_freq,learning_chunks-chunks_done)
+            carry,_=jax.lax.scan(learn_chunk,carry,None,length=chunk_count)
+            chunks_done+=chunk_count
+            record_evaluation(warmup_steps+chunks_done*step_chunk_trans,round_index)
+            round_index+=1
 
     cost_m=(time.time()-start_t)/60.0
     print(f"Key {w_np.tolist()} finished in {cost_m:.2f} mins. Optimal Vector Return: {best_vec_return.tolist()}",flush=True)
-    return best_vec_return
+    optimizer_steps=total_env_steps if source_like else total_env_steps-warmup_steps
+    return best_vec_return,{
+        "runtime_seconds":time.time()-start_t,
+        "best_step":best_step,
+        "best_std_vector_return":best_std_return.tolist(),
+        "evaluation_history":evaluation_history,
+        "critic_optimizer_step_count":optimizer_steps,
+        "actor_optimizer_step_count":optimizer_steps//policy_freq,
+        "evaluation_episodes":eval_episode_count,
+        "evaluation_trigger":"100_completed_episodes" if source_like else f"{eval_interval}_environment_steps",
+        "preference_noise":source_like,
+        "update_during_random_action_warmup":source_like,
+        "learner_start_replay_entries":step_chunk_trans if source_like else warmup_steps,
+    }
 
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--key-index",type=int,choices=(0,1,2),required=True)
     parser.add_argument("--output",type=Path,required=True)
+    parser.add_argument("--seed",type=int)
+    parser.add_argument("--source-like",action="store_true")
     args=parser.parse_args()
     if args.output.exists():
         raise FileExistsError(f"refusing to overwrite {args.output}")
 
     keys=key_preferences(2) # [[0.0, 1.0], [0.5, 0.5], [1.0, 0.0]]
     preference=np.asarray(keys[args.key_index],dtype=np.float32)
-    seed_val=seed+args.key_index*17
-    result=train_single_key(preference,seed_val=seed_val)
+    seed_val=args.seed if args.seed is not None else seed+args.key_index*17
+    result,metadata=train_single_key(preference,seed_val=seed_val,source_like=args.source_like)
     payload={
         "key_index":args.key_index,
         "preference":preference.tolist(),
@@ -317,15 +370,15 @@ def main():
         "num_envs":num_envs,
         "rollout_length":rollout_len,
         "updates_per_chunk":updates_per_chunk,
-        "critic_optimizer_step_count":(
-            total_env_steps-warmup_steps
-        )//(num_envs*rollout_len)*updates_per_chunk,
-        "actor_optimizer_step_count":(
-            (total_env_steps-warmup_steps)//(num_envs*rollout_len)*updates_per_chunk
-        )//policy_freq,
+        "critic_optimizer_step_count":metadata["critic_optimizer_step_count"],
+        "actor_optimizer_step_count":metadata["actor_optimizer_step_count"],
         "batch_size":batch_size,
         "policy_freq":policy_freq,
         "gamma":gamma,
+        "normalized_direction":(
+            np.asarray(result,dtype=np.float64)/np.linalg.norm(result)
+        ).tolist(),
+        **metadata,
     }
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(payload,indent=2)+"\n",encoding="utf-8")
