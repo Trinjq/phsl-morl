@@ -87,6 +87,9 @@ def test_batched_evaluator_matches_serial_for_key_and_padded_batches():
 
 
 def test_device_key_evaluation_returns_fixed_jax_shape():
+    serial = PDMORLEvaluator(
+        _TwoStepEnv(1), _PreferenceAgent(), max_episode_steps=5
+    )
     batched = BatchedPDMORLEvaluator(
         key_env=_TwoStepEnv(9),
         env=_TwoStepEnv(5),
@@ -97,6 +100,9 @@ def test_device_key_evaluation_returns_fixed_jax_shape():
     assert isinstance(returns, jax.Array)
     assert returns.shape == (3, 3, 2)
     assert np.isfinite(np.asarray(returns)).all()
+    np.testing.assert_allclose(
+        returns, serial.evaluate_keys_device(None, repeats=3), rtol=0, atol=0
+    )
 
 
 def test_source_compatible_metric_aggregation():

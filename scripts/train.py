@@ -670,7 +670,9 @@ def train(config: DictConfig) -> None:
             "interpolator_backend": "jax",
             "key_objective_normalization": "l2",
             "key_artifact_path": str(artifact_path.resolve()),
-            "key_artifact_sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+            "key_artifact_sha256": hashlib.sha256(
+                artifact_path.read_bytes().replace(b"\r\n", b"\n")
+            ).hexdigest(),
             "git_commit": git_commit,
             "runtime_source_sha256": _source_fingerprint(),
             "date_utc": datetime.now(timezone.utc).isoformat(),
