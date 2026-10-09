@@ -54,6 +54,11 @@ num_eval_envs: 10
 eval_episodes: 3
 eval_batch_size: 64
 run_final_evaluation: true
+hv_history:
+  enable: false
+  write_csv: true
+  plot_on_finish: true
+  console_output: false
 
 agent_network:
   critic_hidden_layer_sizes: [400, 400]

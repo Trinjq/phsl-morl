@@ -38,6 +38,11 @@ total_timesteps: 10000000
 fold_iters: 1
 num_eval_envs: 10
 eval_episodes: 3
+hv_history:
+  enable: true
+  write_csv: true
+  plot_on_finish: true
+  console_output: false
 
 random_timesteps: 1530
 learning_start_timesteps: 1530
