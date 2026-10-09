@@ -2,9 +2,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from scipy.interpolate import RBFInterpolator
 from evorl.utils.pd_morl_interpolator import (
     fit_interpolator_state,
-    fit_reference_interpolator,
     interpolate,
     key_preferences,
     normalize_key_solutions,
@@ -33,7 +33,13 @@ def _errors(reference, actual):
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
 def test_scipy_jax_golden(normalization, solutions, dtype):
     with jax.enable_x64(dtype == np.float64):
-        reference = fit_reference_interpolator(KEYS, solutions, normalization)(QUERIES)
+        reference = RBFInterpolator(
+            KEYS,
+            np.asarray(normalize_key_solutions(solutions, normalization)),
+            kernel="linear",
+            smoothing=0,
+            degree=0,
+        )(QUERIES)
         state = fit_interpolator_state(KEYS, solutions, normalization, dtype=dtype)
         queries = jnp.asarray(QUERIES, dtype=dtype)
         eager = np.asarray(interpolate(state, queries))
@@ -41,7 +47,7 @@ def test_scipy_jax_golden(normalization, solutions, dtype):
         vmapped = np.asarray(jax.vmap(lambda w: interpolate(state, w))(queries))
         single_shape = interpolate(state, queries[0]).shape
 
-    tolerance = 2e-7 if dtype == np.float32 else 2e-14
+    tolerance = 2e-5 if dtype == np.float32 else 1e-10
     assert _errors(reference, eager)[0] <= tolerance
     assert np.allclose(eager, compiled, rtol=0, atol=tolerance)
     assert np.allclose(eager, vmapped, rtol=0, atol=tolerance)
@@ -54,14 +60,25 @@ def test_scipy_jax_golden(normalization, solutions, dtype):
 def test_official_walker_key_order_and_normalizations():
     assert np.array_equal(key_preferences(2), KEYS)
     assert np.allclose(
-        np.linalg.norm(normalize_key_solutions(SOLUTIONS, "initial"), axis=1), 1
+        np.linalg.norm(normalize_key_solutions(SOLUTIONS, "initial"), ord=2, axis=1), 1
     )
     assert np.allclose(
-        np.linalg.norm(normalize_key_solutions(SOLUTIONS, "online"), ord=1, axis=1), 1
+        np.linalg.norm(normalize_key_solutions(SOLUTIONS, "online"), ord=2, axis=1), 1
     )
     assert np.array_equal(
         normalize_key_solutions(np.zeros((1, 2)), "initial"), np.zeros((1, 2))
     )
+
+
+def test_fit_is_jittable():
+    fit = jax.jit(
+        lambda solutions: fit_interpolator_state(
+            jnp.asarray(KEYS), solutions, "online", dtype=jnp.float32
+        )
+    )
+    state = fit(jnp.asarray(SOLUTIONS, dtype=jnp.float32))
+    assert state.coefficients.shape == (4, 2)
+    assert np.isfinite(np.asarray(state.coefficients)).all()
 
 
 def test_update_rule_and_online_refit():

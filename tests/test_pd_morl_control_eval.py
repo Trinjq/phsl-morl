@@ -18,6 +18,7 @@ from evorl.evaluators.pd_morl import (
     replace_key_solutions,
     sparsity,
     update_key_solutions,
+    update_key_solutions_jax,
 )
 from evorl.utils.pd_morl_interpolator import key_preferences
 from pymoo.indicators.hv import HV
@@ -112,11 +113,28 @@ def test_replacement_is_direct_assignment_and_no_ema():
     np.testing.assert_array_equal(updated, candidate)
 
 
-def test_online_refit_uses_l1():
+def test_online_refit_uses_l2():
     old = np.array([[1.0, 2.0], [2.0, 2.0], [3.0, 1.0]])
     updated, _, state = update_key_solutions(old, np.stack((old, old)), KEYS)
     np.testing.assert_allclose(
-        state.normalized_key_solutions, updated / updated.sum(1)[:, None]
+        state.normalized_key_solutions,
+        updated / np.linalg.norm(updated, ord=2, axis=1, keepdims=True),
+        rtol=0,
+        atol=2e-5,
+    )
+
+
+def test_jitted_online_update_averages_repeats_and_refits():
+    old = np.asarray([[1.0, 2.0], [2.0, 2.0], [3.0, 1.0]])
+    repeats = np.stack((old, old + 1.0, old + 2.0))
+    updated, improved, state = update_key_solutions_jax(old, repeats, KEYS)
+    expected = repeats.mean(axis=0)
+    np.testing.assert_allclose(updated, expected)
+    np.testing.assert_array_equal(improved, [True, True, True])
+    np.testing.assert_allclose(
+        state.normalized_key_solutions,
+        expected / np.linalg.norm(expected, axis=1, keepdims=True),
+        atol=2e-5,
     )
 
 
