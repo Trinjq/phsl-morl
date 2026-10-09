@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-
+from evorl.algorithms.mo_td3 import periodic_update_count
 from evorl.envs import EnvState
 from evorl.envs.wrappers.preference_wrapper import make_logical_worker_ids
 from evorl.evaluators.pd_morl import BatchedPDMORLEvaluator, PDMORLEvaluator
@@ -72,7 +72,9 @@ def test_batched_evaluator_matches_serial_for_key_and_padded_batches():
         )
         np.testing.assert_allclose(actual.mean_returns, expected.mean_returns)
         np.testing.assert_allclose(actual.hv_per_repeat, expected.hv_per_repeat)
-        np.testing.assert_allclose(actual.sparsity_per_repeat, expected.sparsity_per_repeat)
+        np.testing.assert_allclose(
+            actual.sparsity_per_repeat, expected.sparsity_per_repeat
+        )
         np.testing.assert_array_equal(
             actual.pareto_counts_per_repeat, expected.pareto_counts_per_repeat
         )
@@ -84,9 +86,22 @@ def test_batched_evaluator_matches_serial_for_key_and_padded_batches():
         assert actual.mean_repeat_sparsity == expected.mean_repeat_sparsity
 
 
+def test_device_key_evaluation_returns_fixed_jax_shape():
+    batched = BatchedPDMORLEvaluator(
+        key_env=_TwoStepEnv(9),
+        env=_TwoStepEnv(5),
+        agent=_PreferenceAgent(),
+        max_episode_steps=5,
+    )
+    returns = batched.evaluate_keys_device(None, repeats=3)
+    assert isinstance(returns, jax.Array)
+    assert returns.shape == (3, 3, 2)
+    assert np.isfinite(np.asarray(returns)).all()
+
+
 def test_source_compatible_metric_aggregation():
     """Verify source-compatible evaluation aggregation order and field distinction."""
-    from evorl.evaluators.pd_morl import morl_evaluation_result, sparsity, hypervolume
+    from evorl.evaluators.pd_morl import hypervolume, morl_evaluation_result, sparsity
 
     # 2 repeats, 5 preferences. Point 4 is dominated.
     # Repeat 0:
@@ -99,7 +114,9 @@ def test_source_compatible_metric_aggregation():
     res = morl_evaluation_result(prefs, returns)
 
     # 1. Mean over repeat axis first
-    expected_means = np.array([[9.0, 1.0], [7.0, 4.0], [4.0, 7.0], [2.0, 9.0], [2.0, 2.0]])
+    expected_means = np.array(
+        [[9.0, 1.0], [7.0, 4.0], [4.0, 7.0], [2.0, 9.0], [2.0, 2.0]]
+    )
     np.testing.assert_allclose(res.mean_returns, expected_means)
 
     # 2. Non-dominated filtering on mean returns excludes [2.0, 2.0]
@@ -119,7 +136,9 @@ def test_source_compatible_metric_aggregation():
     assert len(res.pareto_counts_per_repeat) == 2
     np.testing.assert_allclose(res.mean_repeat_hv, res.hv_per_repeat.mean())
     np.testing.assert_allclose(res.mean_repeat_sparsity, res.sparsity_per_repeat.mean())
-    np.testing.assert_allclose(res.mean_repeat_pareto_count, res.pareto_counts_per_repeat.mean())
+    np.testing.assert_allclose(
+        res.mean_repeat_pareto_count, res.pareto_counts_per_repeat.mean()
+    )
 
     # 5. Single Pareto point gives sparsity 0.0
     single_pt_res = morl_evaluation_result(np.zeros((1, 2)), np.array([[[5.0, 5.0]]]))
@@ -154,10 +173,23 @@ def test_policy_delay_aligned_with_critic_steps():
         assert actor_updates == total_critic_steps // policy_freq
 
 
+def test_runtime_actor_counter_handles_k_below_policy_frequency():
+    assert periodic_update_count(0, 20, 10) == 2
+    assert periodic_update_count(5, 20, 10) == 2
+
+
+def test_warmup_diagnostic_subtraction_does_not_underflow():
+    worker_steps = np.asarray([6816], dtype=np.uint32).astype(np.int64)
+    np.testing.assert_array_equal(np.maximum(worker_steps - 10000, 0), [0])
+
+
 def test_sparsity_excludes_dominated_points():
     from evorl.evaluators.pd_morl import morl_evaluation_result, sparsity
+
     # 5 points: (1, 10), (5, 5), (10, 1) are non-dominated. (2, 2) and (0.5, 0.5) are dominated.
-    raw_returns = np.array([[[1.0, 10.0], [5.0, 5.0], [10.0, 1.0], [2.0, 2.0], [0.5, 0.5]]])
+    raw_returns = np.array(
+        [[[1.0, 10.0], [5.0, 5.0], [10.0, 1.0], [2.0, 2.0], [0.5, 0.5]]]
+    )
     dummy_prefs = np.zeros((5, 2))
     res = morl_evaluation_result(dummy_prefs, raw_returns)
     assert res.pareto_counts_per_repeat[0] == 3
@@ -168,18 +200,19 @@ def test_sparsity_excludes_dominated_points():
 
 
 def test_checkpoint_manager_save_and_reload(tmp_path):
-    import tempfile
-    from omegaconf import OmegaConf
     from evorl.utils.orbax_utils import setup_checkpoint_manager
+    from omegaconf import OmegaConf
 
-    cfg = OmegaConf.create({
-        "output_dir": str(tmp_path),
-        "checkpoint": {
-            "enable": True,
-            "save_interval_steps": 1,
-            "max_to_keep": 2,
-        },
-    })
+    cfg = OmegaConf.create(
+        {
+            "output_dir": str(tmp_path),
+            "checkpoint": {
+                "enable": True,
+                "save_interval_steps": 1,
+                "max_to_keep": 2,
+            },
+        }
+    )
     manager = setup_checkpoint_manager(cfg)
     dummy_state = {"params": jnp.array([1.0, 2.0, 3.0]), "step": 10}
     manager.save(1, dummy_state, force=True)
@@ -192,4 +225,3 @@ def test_checkpoint_manager_save_and_reload(tmp_path):
     np.testing.assert_allclose(restored["params"], dummy_state["params"])
     assert restored["step"] == 10
     manager.close()
-

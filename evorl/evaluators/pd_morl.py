@@ -17,6 +17,7 @@ from evorl.types import PyTreeDict
 from evorl.utils.pd_morl_interpolator import (
     PDMORLInterpolatorState,
     fit_interpolator_state,
+    key_preferences,
 )
 
 
@@ -147,6 +148,23 @@ def update_key_solutions(
     # Source refits after every trigger, including when no key was replaced.
     state = fit_interpolator_state(keys, updated, "online", dtype=dtype)
     return updated, improved, state
+
+
+def _update_key_solutions_jax(
+    old_solutions: jax.Array,
+    returns_per_repeat: jax.Array,
+    keys: jax.Array,
+) -> tuple[jax.Array, jax.Array, PDMORLInterpolatorState]:
+    old = jnp.asarray(old_solutions)
+    candidates = jnp.asarray(returns_per_repeat).mean(axis=0)
+    keys = jnp.asarray(keys, dtype=old.dtype)
+    improved = jnp.sum(keys * candidates, axis=1) > jnp.sum(keys * old, axis=1)
+    updated = jnp.where(improved[:, None], candidates, old)
+    state = fit_interpolator_state(keys, updated, "online", dtype=old.dtype)
+    return updated, improved, state
+
+
+update_key_solutions_jax = jax.jit(_update_key_solutions_jax)
 
 
 def non_dominated_indices(returns: np.ndarray) -> np.ndarray:
@@ -409,3 +427,19 @@ class BatchedPDMORLEvaluator:
 
         returns = flat_returns.reshape(repeats, count, -1)
         return morl_evaluation_result(preferences, returns)
+
+    def evaluate_keys_device(
+        self, agent_state: AgentState, repeats: int = 3
+    ) -> jax.Array:
+        """Return fixed-shape key returns without crossing the host boundary."""
+        if repeats != 3:
+            raise ValueError("GPU-native key evaluation requires exactly 3 repeats")
+        preferences = jnp.asarray(key_preferences(2), dtype=jnp.float32)
+        count = preferences.shape[0]
+        flat_preferences = jnp.tile(preferences, (repeats, 1))
+        flat_seeds = jnp.repeat(jnp.asarray(evaluation_seeds(repeats)), count)
+        flat_indices = jnp.tile(jnp.arange(count, dtype=jnp.int32), repeats)
+        returns = self._key_batch(
+            agent_state, flat_preferences, flat_seeds, flat_indices
+        )
+        return returns.reshape(repeats, count, -1)
