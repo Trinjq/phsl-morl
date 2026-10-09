@@ -34,18 +34,24 @@ Keys are ordered as [0, 1], [0.5, 0.5], and [1, 0].
     [3090.75732421875, 2036.6268310546875]
     [3629.1171875,  467.25341796875]
 
+## Old/new key-direction comparison
+
+The angle between each legacy and refreshed L2-normalized key return vector is 0.70 degrees for [0, 1], 1.64 degrees for [0.5, 0.5], and 6.06 degrees for [1, 0]. The midpoint scalarized return changed from 2,466.85 to 2,563.69. The refreshed endpoint ordering remains consistent with the preference weights, and the midpoint is not directly dominated by both endpoints under the validator checks.
+
 ## Matched training results
 
-The training command requested total_timesteps=2,000,960. Due to the workflow's rollout chunking, the final logged environment count was 1,988,160 for every paired run; this is recorded rather than rounded up.
+The training command requested total_timesteps=2,000,960. The authoritative counters_summary.json for every run reports 780 host chunks, 3,120 inner rollouts, and exactly 2,000,960 environment transitions. The periodic train.log record at iteration 3,100 is intermediate; the final counter summary and training-final evaluation are used below.
 
-| Artifact | Seed | Final hypervolume | Pareto points | Final sparsity | Logged env. steps |
-|---|---:|---:|---:|---:|---:|
-| Legacy | 0 | 6,854,922.53 | 199 | 2,224.23 | 1,988,160 |
-| Legacy | 1 | 6,030,473.57 | 122 | 3,607.16 | 1,988,160 |
-| Refreshed | 0 | 7,189,660.59 | 240 | 2,709.13 | 1,988,160 |
-| Refreshed | 1 | 6,089,595.55 | 113 | 690.77 | 1,988,160 |
+| Artifact | Seed | Final hypervolume | Pareto points | Final sparsity | Mid preference return (R1, R2) | Key eval/refit/repl. | Env. steps |
+|---|---:|---:|---:|---:|---|---|---:|
+| Legacy | 0 | 6,854,922.53 | 199 | 2,224.23 | (2,871.46, 1,827.99) | 69 / 69 / 0 | 2,000,960 |
+| Legacy | 1 | 6,030,473.57 | 122 | 3,607.16 | (1,948.00, 1,439.64) | 71 / 71 / 0 | 2,000,960 |
+| Refreshed | 0 | 7,189,660.59 | 240 | 2,709.13 | (2,716.76, 1,880.27) | 67 / 67 / 0 | 2,000,960 |
+| Refreshed | 1 | 6,089,595.55 | 113 | 690.77 | (1,066.87, 840.02) | 71 / 71 / 0 | 2,000,960 |
 
 Across the two seeds, mean hypervolume changed from 6,442,698.05 to 6,639,628.07 (+3.06%), and mean Pareto count changed from 160.5 to 176.5. Mean sparsity changed from 2,915.69 to 1,699.95. The improvement is not uniform across every seed and metric: refreshed seed 0 improved hypervolume and Pareto count but had higher sparsity, while refreshed seed 1 improved hypervolume and sparsity but had fewer Pareto points. With two seeds, this supports adopting the refreshed artifact as the default provenance update, not a claim of universal performance dominance.
+
+End-to-final-evaluation elapsed times were 2,528.3 s and 2,548.5 s for legacy seeds 0/1, and 2,550.8 s and 2,508.6 s for refreshed seeds 0/1. The first logged iteration-12 times, used as a compile/warm-up proxy, were 241.8 s, 241.7 s, 240.7 s, and 237.0 s in the same order. These are run-level observations on the lab4090 GPU, not a controlled speedup claim.
 
 ## Run outputs
 
@@ -55,6 +61,7 @@ Across the two seeds, mean hypervolume changed from 6,442,698.05 to 6,639,628.07
 - Refreshed seed 1: outputs/key_artifact_refresh/new_seed_1
 - Candidate validation: outputs/key_artifact_refresh/evaluation/validation.json
 - Promotion record: outputs/key_artifact_refresh/evaluation/promote.json
+- Per-run counters: outputs/key_artifact_refresh/{old_seed_0,old_seed_1,new_seed_0,new_seed_1}/counters_summary.json
 
 All four run metadata files record the frozen source commit, GPU backend, absolute artifact path, and the SHA corresponding to the artifact used by that run.
 
