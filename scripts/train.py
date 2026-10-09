@@ -574,7 +574,12 @@ def _finish_formal_run(config, workflow, state, metadata, started_at):
     if latest_step is None:
         raise RuntimeError("final checkpoint is missing")
     before_actions = _deterministic_probe(workflow, state)
-    restored = workflow.checkpoint_manager.restore(latest_step, state)
+    restore_state = state
+    if not bool(config.get("save_replay_buffer", False)):
+        from evorl.algorithms.offpolicy_utils import skip_replay_buffer_state
+
+        restore_state = skip_replay_buffer_state(state)
+    restored = workflow.checkpoint_manager.restore(latest_step, restore_state)
     after_actions = _deterministic_probe(workflow, restored)
     restore_checks = {
         "actor_outputs": np.array_equal(before_actions, after_actions),
