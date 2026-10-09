@@ -1,12 +1,12 @@
 {
-  "artifact": "interp_objs_walker2d_brax.txt",
-  "artifact_sha256": "989e74d631ba74572884c4f32b19e12c9317af847ffbc6c02bdde5ad39bfa209",
+  "artifact": "interp_objs_walker2d_brax.candidate.txt",
+  "artifact_sha256": "cfdff6643b70591670080f1c80fa9a146c1d60576e1cca57813c1ed84ff843f2",
   "command": [
     "scripts/train_brax_key_solutions.py",
     "--output-dir",
-    "outputs/key_retrain"
+    "outputs/key_artifact_refresh/key_full"
   ],
-  "git_commit": "d96be276639fc15b1ec0584ac9e714d0fd8927bc",
+  "git_commit": "27b16052af1d91fca6b302583e2139a8424fd967",
   "hyperparameters": {
     "batch_size": 100,
     "evaluation_episodes": 10,
@@ -40,1047 +40,1117 @@
   ],
   "per_key": [
     {
-      "best_scalarized_return": 2491.56396484375,
+      "best_scalarized_return": 2491.552978515625,
       "best_std_vector_return": [
-        0.6033568978309631,
-        0.1104518249630928
+        5.752388954162598,
+        0.8598383665084839
       ],
-      "best_step": 1140992,
+      "best_step": 1739264,
       "best_vector_return": [
-        474.2923889160156,
-        2491.56396484375
+        442.87188720703125,
+        2491.552978515625
       ],
       "counts": {
         "actor_optimizer_step_count": 999964,
         "actual_environment_steps": 2000128,
-        "completed_episodes": 7234,
+        "completed_episodes": 7705,
         "critic_optimizer_step_count": 1999929,
         "last_actor_loss": 0.0,
-        "last_critic_loss": 1.3293243646621704,
+        "last_critic_loss": 6.469192981719971,
         "random_action_steps": 25088,
         "replay_size": 500000
       },
-      "elapsed_seconds": 1164.0665187835693,
+      "elapsed_seconds": 2583.245305299759,
       "evaluation_history": [
         {
           "completed_episodes": 110,
           "mean_vector_return": [
-            15.749467849731445,
-            196.31192016601562
+            12.06653881072998,
+            195.12094116210938
           ],
           "phase": "periodic",
-          "scalarized_return": 196.31192016601562,
+          "scalarized_return": 195.12094116210938,
           "std_vector_return": [
-            5.825517654418945,
-            8.251334190368652
+            1.1816046237945557,
+            2.2345614433288574
           ],
           "step": 2816
         },
         {
-          "completed_episodes": 206,
+          "completed_episodes": 208,
           "mean_vector_return": [
-            36.43024826049805,
-            220.85997009277344
+            39.25661087036133,
+            199.83287048339844
           ],
           "phase": "periodic",
-          "scalarized_return": 220.85997009277344,
+          "scalarized_return": 199.83287048339844,
           "std_vector_return": [
-            1.7449901103973389,
-            14.428461074829102
+            0.8894810676574707,
+            3.8549606800079346
           ],
           "step": 4864
         },
         {
-          "completed_episodes": 305,
+          "completed_episodes": 303,
           "mean_vector_return": [
-            39.59489059448242,
-            218.822021484375
+            44.019805908203125,
+            310.44451904296875
           ],
           "phase": "periodic",
-          "scalarized_return": 218.822021484375,
+          "scalarized_return": 310.44451904296875,
           "std_vector_return": [
-            0.7568070292472839,
-            2.319014549255371
+            3.464474678039551,
+            66.4124755859375
           ],
           "step": 6656
         },
         {
-          "completed_episodes": 403,
+          "completed_episodes": 401,
           "mean_vector_return": [
-            24.32281494140625,
-            197.496826171875
+            34.182899475097656,
+            221.96409606933594
           ],
           "phase": "periodic",
-          "scalarized_return": 197.496826171875,
+          "scalarized_return": 221.96409606933594,
           "std_vector_return": [
-            0.4860527813434601,
-            4.083948612213135
+            1.9918674230575562,
+            7.12260103225708
           ],
           "step": 8704
         },
         {
           "completed_episodes": 512,
           "mean_vector_return": [
-            9.730151176452637,
-            192.04856872558594
+            20.32535171508789,
+            159.3114776611328
           ],
           "phase": "periodic",
-          "scalarized_return": 192.04856872558594,
+          "scalarized_return": 159.3114776611328,
           "std_vector_return": [
-            0.9253063201904297,
-            15.386053085327148
+            0.2055102288722992,
+            0.3262362480163574
           ],
           "step": 10752
         },
         {
-          "completed_episodes": 601,
+          "completed_episodes": 605,
           "mean_vector_return": [
-            3.8043885231018066,
-            198.70481872558594
+            13.70548152923584,
+            133.44175720214844
           ],
           "phase": "periodic",
-          "scalarized_return": 198.70481872558594,
+          "scalarized_return": 133.44175720214844,
           "std_vector_return": [
-            1.1502556800842285,
-            3.792579412460327
+            0.1337636262178421,
+            0.4631095230579376
           ],
           "step": 12544
         },
         {
-          "completed_episodes": 708,
+          "completed_episodes": 705,
           "mean_vector_return": [
-            1.5607212781906128,
-            145.1652069091797
+            10.232407569885254,
+            122.70732879638672
           ],
           "phase": "periodic",
-          "scalarized_return": 145.1652069091797,
+          "scalarized_return": 122.70732879638672,
           "std_vector_return": [
-            0.9063296914100647,
-            7.389899730682373
+            0.45495498180389404,
+            2.379408597946167
           ],
-          "step": 14592
+          "step": 14336
         },
         {
           "completed_episodes": 800,
           "mean_vector_return": [
-            -9.221065521240234,
-            269.1988525390625
+            6.779791355133057,
+            104.1871566772461
           ],
           "phase": "periodic",
-          "scalarized_return": 269.1988525390625,
+          "scalarized_return": 104.1871566772461,
           "std_vector_return": [
-            5.592715740203857,
-            39.596351623535156
+            0.38808274269104004,
+            0.990256667137146
           ],
           "step": 16384
         },
         {
-          "completed_episodes": 905,
+          "completed_episodes": 900,
           "mean_vector_return": [
-            0.2888557016849518,
-            251.60081481933594
+            13.696331977844238,
+            130.6907501220703
           ],
           "phase": "periodic",
-          "scalarized_return": 251.60081481933594,
+          "scalarized_return": 130.6907501220703,
           "std_vector_return": [
-            3.5695180892944336,
-            18.27057456970215
+            0.3849111497402191,
+            1.5751261711120605
           ],
           "step": 18432
         },
         {
-          "completed_episodes": 1010,
+          "completed_episodes": 1008,
           "mean_vector_return": [
-            0.2790559232234955,
-            250.88455200195312
+            4.386854648590088,
+            119.29912567138672
           ],
           "phase": "periodic",
-          "scalarized_return": 250.88455200195312,
+          "scalarized_return": 119.29912567138672,
           "std_vector_return": [
-            6.178235054016113,
-            8.669060707092285
+            0.11984174698591232,
+            0.22625119984149933
           ],
           "step": 20480
         },
         {
-          "completed_episodes": 1102,
+          "completed_episodes": 1100,
           "mean_vector_return": [
-            5.332104682922363,
-            183.55545043945312
+            0.9714176058769226,
+            90.95763397216797
           ],
           "phase": "periodic",
-          "scalarized_return": 183.55545043945312,
+          "scalarized_return": 90.95763397216797,
           "std_vector_return": [
-            3.3290600776672363,
-            5.807924747467041
+            0.0982746109366417,
+            0.6243150234222412
           ],
           "step": 22272
         },
         {
           "completed_episodes": 1209,
           "mean_vector_return": [
-            4.2625651359558105,
-            159.9268035888672
+            -0.9219443202018738,
+            86.53723907470703
           ],
           "phase": "periodic",
-          "scalarized_return": 159.9268035888672,
+          "scalarized_return": 86.53723907470703,
           "std_vector_return": [
-            0.5373954176902771,
-            2.7713515758514404
+            0.2555522918701172,
+            1.3308764696121216
           ],
           "step": 24320
         },
         {
-          "completed_episodes": 1304,
+          "completed_episodes": 1302,
           "mean_vector_return": [
-            -2.419259786605835,
-            158.50473022460938
+            3.452410936355591,
+            127.79019927978516
           ],
           "phase": "periodic",
-          "scalarized_return": 158.50473022460938,
+          "scalarized_return": 127.79019927978516,
           "std_vector_return": [
-            3.478322982788086,
-            45.298213958740234
+            2.063725233078003,
+            7.668853282928467
           ],
-          "step": 27648
+          "step": 27136
         },
         {
           "completed_episodes": 1400,
           "mean_vector_return": [
-            171.43081665039062,
-            600.2582397460938
+            2.5044658184051514,
+            182.1918182373047
           ],
           "phase": "periodic",
-          "scalarized_return": 600.2582397460938,
+          "scalarized_return": 182.1918182373047,
           "std_vector_return": [
-            42.1110954284668,
-            111.88432312011719
+            0.5287708044052124,
+            1.136309027671814
           ],
-          "step": 36352
+          "step": 30720
         },
         {
-          "completed_episodes": 1503,
+          "completed_episodes": 1500,
           "mean_vector_return": [
-            39.13334655761719,
-            538.575927734375
+            100.0261459350586,
+            423.51666259765625
           ],
           "phase": "periodic",
-          "scalarized_return": 538.575927734375,
+          "scalarized_return": 423.51666259765625,
           "std_vector_return": [
-            5.043726444244385,
-            42.30546188354492
+            2.484464645385742,
+            6.767546653747559
           ],
-          "step": 49920
+          "step": 38144
         },
         {
           "completed_episodes": 1600,
           "mean_vector_return": [
-            175.43710327148438,
-            682.8864135742188
+            74.39430236816406,
+            292.3224182128906
           ],
           "phase": "periodic",
-          "scalarized_return": 682.8864135742188,
+          "scalarized_return": 292.3224182128906,
           "std_vector_return": [
-            111.87183380126953,
-            145.58042907714844
+            89.98631286621094,
+            208.68472290039062
           ],
-          "step": 72960
+          "step": 49152
         },
         {
           "completed_episodes": 1700,
           "mean_vector_return": [
-            400.000244140625,
-            2184.916748046875
+            185.7799530029297,
+            532.4927368164062
           ],
           "phase": "periodic",
-          "scalarized_return": 2184.916748046875,
+          "scalarized_return": 532.4927368164062,
           "std_vector_return": [
-            104.82312774658203,
-            495.22076416015625
+            4.668475151062012,
+            11.582108497619629
           ],
-          "step": 107520
+          "step": 58624
         },
         {
           "completed_episodes": 1800,
           "mean_vector_return": [
-            482.439453125,
-            2482.752685546875
+            63.44743728637695,
+            309.3448181152344
           ],
           "phase": "periodic",
-          "scalarized_return": 2482.752685546875,
+          "scalarized_return": 309.3448181152344,
           "std_vector_return": [
-            0.6576471328735352,
-            0.11048214137554169
+            24.818527221679688,
+            98.38778686523438
           ],
-          "step": 148992
+          "step": 69632
         },
         {
           "completed_episodes": 1900,
           "mean_vector_return": [
-            502.6822204589844,
-            2477.232666015625
+            232.20933532714844,
+            501.6459045410156
           ],
           "phase": "periodic",
-          "scalarized_return": 2477.232666015625,
+          "scalarized_return": 501.6459045410156,
           "std_vector_return": [
-            13.15213680267334,
-            3.5907816886901855
+            18.647220611572266,
+            30.21094512939453
           ],
-          "step": 204288
+          "step": 85248
         },
         {
           "completed_episodes": 2000,
           "mean_vector_return": [
-            34.950286865234375,
-            576.5070190429688
+            114.2072525024414,
+            371.3669128417969
           ],
           "phase": "periodic",
-          "scalarized_return": 576.5070190429688,
+          "scalarized_return": 371.3669128417969,
           "std_vector_return": [
-            30.111404418945312,
-            185.97406005859375
+            6.61572790145874,
+            38.296424865722656
           ],
-          "step": 243712
+          "step": 102144
         },
         {
           "completed_episodes": 2100,
           "mean_vector_return": [
-            581.970947265625,
-            1766.4012451171875
+            5.83629846572876,
+            22.579708099365234
           ],
           "phase": "periodic",
-          "scalarized_return": 1766.4012451171875,
+          "scalarized_return": 22.579708099365234,
           "std_vector_return": [
-            195.7257843017578,
-            771.5478515625
+            8.378771781921387,
+            3.702690601348877
           ],
-          "step": 262656
+          "step": 140800
         },
         {
-          "completed_episodes": 2200,
+          "completed_episodes": 2203,
           "mean_vector_return": [
-            535.9196166992188,
-            2475.580078125
+            -20.634906768798828,
+            22.56414794921875
           ],
           "phase": "periodic",
-          "scalarized_return": 2475.580078125,
+          "scalarized_return": 22.56414794921875,
           "std_vector_return": [
-            2.4248459339141846,
-            0.4617081880569458
+            1.7308104038238525,
+            1.049167275428772
           ],
-          "step": 285952
+          "step": 148992
         },
         {
-          "completed_episodes": 2300,
+          "completed_episodes": 2304,
           "mean_vector_return": [
-            510.933837890625,
-            2481.21533203125
+            2.3296661376953125,
+            132.63438415527344
           ],
           "phase": "periodic",
-          "scalarized_return": 2481.21533203125,
+          "scalarized_return": 132.63438415527344,
           "std_vector_return": [
-            0.6062459349632263,
-            0.25939345359802246
+            7.983158111572266,
+            7.57051944732666
           ],
-          "step": 345088
+          "step": 156928
         },
         {
-          "completed_episodes": 2400,
+          "completed_episodes": 2404,
           "mean_vector_return": [
-            440.1399841308594,
-            2406.695556640625
+            -3.3939366340637207,
+            109.1596908569336
           ],
           "phase": "periodic",
-          "scalarized_return": 2406.695556640625,
+          "scalarized_return": 109.1596908569336,
           "std_vector_return": [
-            52.64875411987305,
-            133.400146484375
+            2.0818004608154297,
+            3.2828800678253174
           ],
-          "step": 392448
+          "step": 162560
         },
         {
-          "completed_episodes": 2500,
+          "completed_episodes": 2501,
           "mean_vector_return": [
-            489.76837158203125,
-            2483.4853515625
+            179.58885192871094,
+            822.6988525390625
           ],
           "phase": "periodic",
-          "scalarized_return": 2483.4853515625,
+          "scalarized_return": 822.6988525390625,
           "std_vector_return": [
-            0.6899860501289368,
-            0.30781155824661255
+            85.28033447265625,
+            407.0577392578125
           ],
-          "step": 442880
+          "step": 171776
         },
         {
-          "completed_episodes": 2601,
+          "completed_episodes": 2600,
           "mean_vector_return": [
-            484.3774108886719,
-            2483.915771484375
+            451.1896667480469,
+            1668.1412353515625
           ],
           "phase": "periodic",
-          "scalarized_return": 2483.915771484375,
+          "scalarized_return": 1668.1412353515625,
           "std_vector_return": [
-            0.8245275616645813,
-            0.20557712018489838
+            133.57362365722656,
+            546.5680541992188
           ],
-          "step": 501248
+          "step": 199680
         },
         {
-          "completed_episodes": 2701,
+          "completed_episodes": 2700,
           "mean_vector_return": [
-            460.82110595703125,
-            2489.353759765625
+            502.2420349121094,
+            2470.220703125
           ],
           "phase": "periodic",
-          "scalarized_return": 2489.353759765625,
+          "scalarized_return": 2470.220703125,
           "std_vector_return": [
-            0.5246208906173706,
-            0.40074169635772705
+            2.0773868560791016,
+            0.766897439956665
           ],
-          "step": 540160
+          "step": 242432
         },
         {
           "completed_episodes": 2800,
           "mean_vector_return": [
-            484.0289001464844,
-            2482.39501953125
+            533.6296997070312,
+            2362.58740234375
           ],
           "phase": "periodic",
-          "scalarized_return": 2482.39501953125,
+          "scalarized_return": 2362.58740234375,
           "std_vector_return": [
-            0.45279136300086975,
-            0.06327176094055176
+            2.0919034481048584,
+            3.881635904312134
           ],
-          "step": 598528
+          "step": 293632
         },
         {
-          "completed_episodes": 2902,
+          "completed_episodes": 2900,
           "mean_vector_return": [
-            476.4092712402344,
-            2478.3203125
+            567.4627685546875,
+            2459.359130859375
           ],
           "phase": "periodic",
-          "scalarized_return": 2478.3203125,
+          "scalarized_return": 2459.359130859375,
           "std_vector_return": [
-            7.85473108291626,
-            1.7681310176849365
+            38.445640563964844,
+            10.998682975769043
           ],
-          "step": 636672
+          "step": 347648
         },
         {
-          "completed_episodes": 3012,
+          "completed_episodes": 3000,
           "mean_vector_return": [
-            32.15983581542969,
-            -34.622562408447266
+            508.52471923828125,
+            2468.661865234375
           ],
           "phase": "periodic",
-          "scalarized_return": -34.622562408447266,
+          "scalarized_return": 2468.661865234375,
           "std_vector_return": [
-            1.982305645942688,
-            2.137281656265259
+            0.6204375624656677,
+            0.5134983062744141
           ],
-          "step": 648192
+          "step": 388352
         },
         {
           "completed_episodes": 3100,
           "mean_vector_return": [
-            74.08220672607422,
-            219.9971466064453
+            463.6747741699219,
+            2471.184326171875
           ],
           "phase": "periodic",
-          "scalarized_return": 219.9971466064453,
+          "scalarized_return": 2471.184326171875,
           "std_vector_return": [
-            12.154552459716797,
-            60.82780838012695
+            1.728570580482483,
+            0.5922123789787292
           ],
-          "step": 663808
+          "step": 440064
         },
         {
-          "completed_episodes": 3203,
+          "completed_episodes": 3201,
           "mean_vector_return": [
-            258.13470458984375,
-            544.42919921875
+            401.7571716308594,
+            2027.5924072265625
           ],
           "phase": "periodic",
-          "scalarized_return": 544.42919921875,
+          "scalarized_return": 2027.5924072265625,
           "std_vector_return": [
-            145.68370056152344,
-            224.72312927246094
+            183.70947265625,
+            886.4744262695312
           ],
-          "step": 675072
+          "step": 492288
         },
         {
           "completed_episodes": 3300,
           "mean_vector_return": [
-            338.0664978027344,
-            1340.8570556640625
+            538.9923706054688,
+            2470.309814453125
           ],
           "phase": "periodic",
-          "scalarized_return": 1340.8570556640625,
+          "scalarized_return": 2470.309814453125,
           "std_vector_return": [
-            144.94024658203125,
-            628.7262573242188
+            27.096311569213867,
+            5.722029685974121
           ],
-          "step": 699136
+          "step": 541440
         },
         {
           "completed_episodes": 3400,
           "mean_vector_return": [
-            5.192300319671631,
-            106.35916900634766
+            559.2039184570312,
+            2468.7548828125
           ],
           "phase": "periodic",
-          "scalarized_return": 106.35916900634766,
+          "scalarized_return": 2468.7548828125,
           "std_vector_return": [
-            47.11898422241211,
-            16.11200523376465
+            8.092767715454102,
+            0.7238870859146118
           ],
-          "step": 743424
+          "step": 589312
         },
         {
-          "completed_episodes": 3506,
+          "completed_episodes": 3500,
           "mean_vector_return": [
-            11.073620796203613,
-            55.454498291015625
+            487.59722900390625,
+            2477.698974609375
           ],
           "phase": "periodic",
-          "scalarized_return": 55.454498291015625,
+          "scalarized_return": 2477.698974609375,
           "std_vector_return": [
-            25.20892333984375,
-            35.62887191772461
+            8.82298469543457,
+            2.0022354125976562
           ],
-          "step": 754944
+          "step": 627968
         },
         {
-          "completed_episodes": 3601,
+          "completed_episodes": 3600,
           "mean_vector_return": [
-            80.1916732788086,
-            497.5035095214844
+            514.61767578125,
+            2471.80126953125
           ],
           "phase": "periodic",
-          "scalarized_return": 497.5035095214844,
+          "scalarized_return": 2471.80126953125,
           "std_vector_return": [
-            10.272323608398438,
-            70.75765228271484
+            0.45816493034362793,
+            0.14636659622192383
           ],
-          "step": 764672
+          "step": 673024
         },
         {
-          "completed_episodes": 3700,
+          "completed_episodes": 3701,
           "mean_vector_return": [
-            351.3705749511719,
-            1639.488525390625
+            502.1820373535156,
+            2481.775146484375
           ],
           "phase": "periodic",
-          "scalarized_return": 1639.488525390625,
+          "scalarized_return": 2481.775146484375,
           "std_vector_return": [
-            207.31619262695312,
-            780.055419921875
+            1.4807275533676147,
+            0.3294251263141632
           ],
-          "step": 796160
+          "step": 720384
         },
         {
           "completed_episodes": 3801,
           "mean_vector_return": [
-            537.7041015625,
-            2466.1328125
+            468.3473815917969,
+            2490.127685546875
           ],
           "phase": "periodic",
-          "scalarized_return": 2466.1328125,
+          "scalarized_return": 2490.127685546875,
           "std_vector_return": [
-            2.2268543243408203,
-            0.8559239506721497
+            1.166666865348816,
+            0.15157389640808105
           ],
-          "step": 849408
+          "step": 768000
         },
         {
           "completed_episodes": 3901,
           "mean_vector_return": [
-            458.7813415527344,
-            2470.48828125
+            452.5406799316406,
+            2491.476318359375
           ],
           "phase": "periodic",
-          "scalarized_return": 2470.48828125,
+          "scalarized_return": 2491.476318359375,
           "std_vector_return": [
-            1.897241234779358,
-            0.9058769345283508
+            0.4857216775417328,
+            0.10913591086864471
           ],
-          "step": 896000
+          "step": 807168
         },
         {
-          "completed_episodes": 4001,
+          "completed_episodes": 4000,
           "mean_vector_return": [
-            520.7312622070312,
-            2435.104248046875
+            250.7714385986328,
+            1613.9320068359375
           ],
           "phase": "periodic",
-          "scalarized_return": 2435.104248046875,
+          "scalarized_return": 1613.9320068359375,
           "std_vector_return": [
-            5.262022018432617,
-            0.8306583762168884
+            8.518525123596191,
+            45.30229187011719
           ],
-          "step": 945408
+          "step": 852736
         },
         {
           "completed_episodes": 4100,
           "mean_vector_return": [
-            511.95263671875,
-            2472.883544921875
+            471.38995361328125,
+            2484.795166015625
           ],
           "phase": "periodic",
-          "scalarized_return": 2472.883544921875,
+          "scalarized_return": 2484.795166015625,
           "std_vector_return": [
-            2.461801290512085,
-            0.47481897473335266
+            0.26952582597732544,
+            0.08636613935232162
           ],
-          "step": 991488
+          "step": 896000
         },
         {
-          "completed_episodes": 4200,
+          "completed_episodes": 4202,
           "mean_vector_return": [
-            505.9571838378906,
-            2477.879638671875
+            489.0362243652344,
+            2484.49072265625
           ],
           "phase": "periodic",
-          "scalarized_return": 2477.879638671875,
+          "scalarized_return": 2484.49072265625,
           "std_vector_return": [
-            0.8107585310935974,
-            0.1685330718755722
+            0.20716169476509094,
+            0.24505256116390228
           ],
-          "step": 1043456
+          "step": 943360
         },
         {
           "completed_episodes": 4300,
           "mean_vector_return": [
-            485.4376525878906,
-            2484.794921875
+            515.0690307617188,
+            2465.940185546875
           ],
           "phase": "periodic",
-          "scalarized_return": 2484.794921875,
+          "scalarized_return": 2465.940185546875,
           "std_vector_return": [
-            0.3993991017341614,
-            0.05410626530647278
+            0.32903409004211426,
+            0.3988228142261505
           ],
-          "step": 1095680
+          "step": 989184
         },
         {
-          "completed_episodes": 4400,
+          "completed_episodes": 4423,
           "mean_vector_return": [
-            474.2923889160156,
-            2491.56396484375
+            79.04940032958984,
+            458.40625
           ],
           "phase": "periodic",
-          "scalarized_return": 2491.56396484375,
+          "scalarized_return": 458.40625,
           "std_vector_return": [
-            0.6033568978309631,
-            0.1104518249630928
+            145.32742309570312,
+            669.9554443359375
           ],
-          "step": 1140992
+          "step": 1027072
         },
         {
-          "completed_episodes": 4506,
+          "completed_episodes": 4500,
           "mean_vector_return": [
-            39.436038970947266,
-            67.72930908203125
+            494.1338806152344,
+            2486.3515625
           ],
           "phase": "periodic",
-          "scalarized_return": 67.72930908203125,
+          "scalarized_return": 2486.3515625,
           "std_vector_return": [
-            19.733139038085938,
-            98.794189453125
+            0.1385151892900467,
+            0.1960146725177765
           ],
-          "step": 1178368
+          "step": 1062144
         },
         {
-          "completed_episodes": 4600,
+          "completed_episodes": 4601,
           "mean_vector_return": [
-            190.7700653076172,
-            62.31555938720703
+            -14.68706226348877,
+            34.12253952026367
           ],
           "phase": "periodic",
-          "scalarized_return": 62.31555938720703,
+          "scalarized_return": 34.12253952026367,
           "std_vector_return": [
-            113.51183319091797,
-            59.700599670410156
+            3.2908809185028076,
+            2.316711902618408
           ],
-          "step": 1188608
+          "step": 1095936
         },
         {
-          "completed_episodes": 4706,
+          "completed_episodes": 4700,
           "mean_vector_return": [
-            109.84368896484375,
-            86.1443099975586
+            114.51305389404297,
+            464.2184143066406
           ],
           "phase": "periodic",
-          "scalarized_return": 86.1443099975586,
+          "scalarized_return": 464.2184143066406,
           "std_vector_return": [
-            39.41810989379883,
-            27.83868408203125
+            159.1044921875,
+            524.31982421875
           ],
-          "step": 1196800
+          "step": 1108992
         },
         {
-          "completed_episodes": 4807,
+          "completed_episodes": 4802,
           "mean_vector_return": [
-            27.47455406188965,
-            68.12666320800781
+            364.0850830078125,
+            2054.587646484375
           ],
           "phase": "periodic",
-          "scalarized_return": 68.12666320800781,
+          "scalarized_return": 2054.587646484375,
           "std_vector_return": [
-            0.6266456842422485,
-            3.6698250770568848
+            108.84488677978516,
+            599.644287109375
           ],
-          "step": 1204224
+          "step": 1130496
         },
         {
           "completed_episodes": 4900,
           "mean_vector_return": [
-            816.609619140625,
-            706.38525390625
+            193.9408416748047,
+            883.1759643554688
           ],
           "phase": "periodic",
-          "scalarized_return": 706.38525390625,
+          "scalarized_return": 883.1759643554688,
           "std_vector_return": [
-            48.320491790771484,
-            63.51105499267578
+            125.63426208496094,
+            497.71124267578125
           ],
-          "step": 1215232
+          "step": 1155584
         },
         {
-          "completed_episodes": 5001,
+          "completed_episodes": 5002,
           "mean_vector_return": [
-            583.3079223632812,
-            2209.468505859375
+            18.044145584106445,
+            98.6562728881836
           ],
           "phase": "periodic",
-          "scalarized_return": 2209.468505859375,
+          "scalarized_return": 98.6562728881836,
           "std_vector_return": [
-            54.06440353393555,
-            208.7364044189453
+            0.47105467319488525,
+            2.0613749027252197
           ],
-          "step": 1268480
+          "step": 1179904
         },
         {
-          "completed_episodes": 5101,
+          "completed_episodes": 5102,
           "mean_vector_return": [
-            528.1049194335938,
-            2452.751708984375
+            503.07110595703125,
+            2477.303466796875
           ],
           "phase": "periodic",
-          "scalarized_return": 2452.751708984375,
+          "scalarized_return": 2477.303466796875,
           "std_vector_return": [
-            0.4327864646911621,
-            0.5533266663551331
+            0.45098862051963806,
+            0.22517229616641998
           ],
-          "step": 1309184
+          "step": 1212416
         },
         {
-          "completed_episodes": 5203,
+          "completed_episodes": 5206,
           "mean_vector_return": [
-            497.53594970703125,
-            2461.984619140625
+            547.0571899414062,
+            2451.5732421875
           ],
           "phase": "periodic",
-          "scalarized_return": 2461.984619140625,
+          "scalarized_return": 2451.5732421875,
           "std_vector_return": [
-            0.8357585668563843,
-            0.19588029384613037
+            0.5997627377510071,
+            0.8243520855903625
           ],
-          "step": 1337856
+          "step": 1246976
         },
         {
           "completed_episodes": 5300,
           "mean_vector_return": [
-            541.6983032226562,
-            2461.514404296875
+            459.5137634277344,
+            2448.457763671875
           ],
           "phase": "periodic",
-          "scalarized_return": 2461.514404296875,
+          "scalarized_return": 2448.457763671875,
           "std_vector_return": [
-            0.43502363562583923,
-            0.11944114416837692
+            1.6216033697128296,
+            1.4353394508361816
           ],
-          "step": 1380096
+          "step": 1279744
         },
         {
           "completed_episodes": 5400,
           "mean_vector_return": [
-            541.0306396484375,
-            2467.06103515625
+            324.06134033203125,
+            1406.6734619140625
           ],
           "phase": "periodic",
-          "scalarized_return": 2467.06103515625,
+          "scalarized_return": 1406.6734619140625,
           "std_vector_return": [
-            0.23549918830394745,
-            0.09449386596679688
+            107.00273132324219,
+            469.92578125
           ],
-          "step": 1434880
+          "step": 1318656
         },
         {
           "completed_episodes": 5500,
           "mean_vector_return": [
-            532.2928466796875,
-            2470.548095703125
+            479.6680603027344,
+            2483.0673828125
           ],
           "phase": "periodic",
-          "scalarized_return": 2470.548095703125,
+          "scalarized_return": 2483.0673828125,
           "std_vector_return": [
-            0.22068113088607788,
-            0.2966388165950775
+            0.7159056663513184,
+            0.32102563977241516
           ],
-          "step": 1491200
+          "step": 1358336
         },
         {
-          "completed_episodes": 5601,
+          "completed_episodes": 5600,
           "mean_vector_return": [
-            468.14361572265625,
-            2491.35498046875
+            404.607421875,
+            2330.398193359375
           ],
           "phase": "periodic",
-          "scalarized_return": 2491.35498046875,
+          "scalarized_return": 2330.398193359375,
           "std_vector_return": [
-            2.5518946647644043,
-            0.7069031596183777
+            32.58320999145508,
+            147.0038299560547
           ],
-          "step": 1533184
+          "step": 1394944
         },
         {
-          "completed_episodes": 5700,
+          "completed_episodes": 5701,
           "mean_vector_return": [
-            34.5199089050293,
-            29.40382194519043
+            120.61832427978516,
+            298.0191955566406
           ],
           "phase": "periodic",
-          "scalarized_return": 29.40382194519043,
+          "scalarized_return": 298.0191955566406,
           "std_vector_return": [
-            15.627659797668457,
-            60.636070251464844
+            4.419007301330566,
+            12.71543025970459
           ],
-          "step": 1582080
+          "step": 1419008
         },
         {
-          "completed_episodes": 5800,
+          "completed_episodes": 5805,
           "mean_vector_return": [
-            170.26805114746094,
-            516.6452026367188
+            165.5535125732422,
+            157.24954223632812
           ],
           "phase": "periodic",
-          "scalarized_return": 516.6452026367188,
+          "scalarized_return": 157.24954223632812,
           "std_vector_return": [
-            11.80016803741455,
-            34.24647903442383
+            41.297607421875,
+            20.69462776184082
           ],
-          "step": 1589248
+          "step": 1428992
         },
         {
           "completed_episodes": 5900,
           "mean_vector_return": [
-            533.5684814453125,
-            2382.54296875
+            453.17333984375,
+            1137.0914306640625
           ],
           "phase": "periodic",
-          "scalarized_return": 2382.54296875,
+          "scalarized_return": 1137.0914306640625,
           "std_vector_return": [
-            0.32128340005874634,
-            2.2538528442382812
+            104.1757583618164,
+            294.66009521484375
           ],
-          "step": 1610752
+          "step": 1438208
         },
         {
           "completed_episodes": 6000,
           "mean_vector_return": [
-            490.93658447265625,
-            2434.282470703125
+            503.0983581542969,
+            2339.470703125
           ],
           "phase": "periodic",
-          "scalarized_return": 2434.282470703125,
+          "scalarized_return": 2339.470703125,
           "std_vector_return": [
-            2.951254367828369,
-            2.5561437606811523
+            12.095047950744629,
+            44.65404510498047
           ],
-          "step": 1645824
+          "step": 1485312
         },
         {
-          "completed_episodes": 6102,
+          "completed_episodes": 6101,
           "mean_vector_return": [
-            -15.250287055969238,
-            -11.99960994720459
+            259.3733825683594,
+            785.3198852539062
           ],
           "phase": "periodic",
-          "scalarized_return": -11.99960994720459,
+          "scalarized_return": 785.3198852539062,
           "std_vector_return": [
-            0.21756109595298767,
-            4.4252952648093924e-05
+            93.73709869384766,
+            809.3710327148438
           ],
-          "step": 1678080
+          "step": 1524224
         },
         {
-          "completed_episodes": 6206,
+          "completed_episodes": 6200,
           "mean_vector_return": [
-            -13.587852478027344,
-            -11.23720932006836
+            8.611578941345215,
+            61.18437576293945
           ],
           "phase": "periodic",
-          "scalarized_return": -11.23720932006836,
+          "scalarized_return": 61.18437576293945,
           "std_vector_return": [
-            0.11104495078325272,
-            1.1008667945861816
+            1.1875509023666382,
+            3.8487937450408936
           ],
-          "step": 1679360
+          "step": 1533696
         },
         {
-          "completed_episodes": 6321,
+          "completed_episodes": 6311,
           "mean_vector_return": [
-            20.8083553314209,
-            -3.217611789703369
+            8.172734260559082,
+            57.95671463012695
           ],
           "phase": "periodic",
-          "scalarized_return": -3.217611789703369,
+          "scalarized_return": 57.95671463012695,
           "std_vector_return": [
-            13.689516067504883,
-            6.923054218292236
+            0.4300095736980438,
+            4.469139575958252
           ],
-          "step": 1680640
+          "step": 1537024
         },
         {
-          "completed_episodes": 6400,
+          "completed_episodes": 6401,
           "mean_vector_return": [
-            61.63801193237305,
-            25.268817901611328
+            19.458724975585938,
+            57.6602897644043
           ],
           "phase": "periodic",
-          "scalarized_return": 25.268817901611328,
+          "scalarized_return": 57.6602897644043,
           "std_vector_return": [
-            53.60715103149414,
-            8.221663475036621
+            0.8357906937599182,
+            4.278278350830078
           ],
-          "step": 1684736
+          "step": 1539584
         },
         {
-          "completed_episodes": 6501,
+          "completed_episodes": 6504,
           "mean_vector_return": [
-            29.735111236572266,
-            44.74583053588867
+            29.875192642211914,
+            105.34342193603516
           ],
           "phase": "periodic",
-          "scalarized_return": 44.74583053588867,
+          "scalarized_return": 105.34342193603516,
           "std_vector_return": [
-            0.5814253091812134,
-            4.2996134757995605
+            2.1240074634552,
+            4.586445331573486
           ],
-          "step": 1690880
+          "step": 1543680
         },
         {
           "completed_episodes": 6601,
           "mean_vector_return": [
-            491.2309265136719,
-            2414.482666015625
+            171.77476501464844,
+            474.48760986328125
           ],
           "phase": "periodic",
-          "scalarized_return": 2414.482666015625,
+          "scalarized_return": 474.48760986328125,
           "std_vector_return": [
-            4.514481544494629,
-            4.848780632019043
+            102.5801773071289,
+            519.61767578125
           ],
-          "step": 1716992
+          "step": 1559552
         },
         {
-          "completed_episodes": 6701,
+          "completed_episodes": 6700,
           "mean_vector_return": [
-            528.3209228515625,
-            2459.310791015625
+            496.1195983886719,
+            2466.718505859375
           ],
           "phase": "periodic",
-          "scalarized_return": 2459.310791015625,
+          "scalarized_return": 2466.718505859375,
           "std_vector_return": [
-            0.3131456971168518,
-            0.34245404601097107
+            0.8371472954750061,
+            0.4815519452095032
           ],
-          "step": 1759744
+          "step": 1600256
         },
         {
-          "completed_episodes": 6804,
+          "completed_episodes": 6801,
           "mean_vector_return": [
-            562.1273803710938,
-            2466.91650390625
+            481.0831604003906,
+            2465.359130859375
           ],
           "phase": "periodic",
-          "scalarized_return": 2466.91650390625,
+          "scalarized_return": 2465.359130859375,
           "std_vector_return": [
-            0.6772066950798035,
-            0.22321844100952148
+            0.689165472984314,
+            0.6606598496437073
           ],
-          "step": 1813504
+          "step": 1642240
         },
         {
-          "completed_episodes": 6900,
+          "completed_episodes": 6901,
           "mean_vector_return": [
-            492.08209228515625,
-            2476.367919921875
+            497.6000061035156,
+            2472.314697265625
           ],
           "phase": "periodic",
-          "scalarized_return": 2476.367919921875,
+          "scalarized_return": 2472.314697265625,
           "std_vector_return": [
-            0.5352233648300171,
-            0.13544540107250214
+            0.4535045921802521,
+            0.2740016281604767
           ],
-          "step": 1865984
+          "step": 1697792
         },
         {
-          "completed_episodes": 7002,
+          "completed_episodes": 7000,
           "mean_vector_return": [
-            475.3411560058594,
-            2482.1572265625
+            442.87188720703125,
+            2491.552978515625
           ],
           "phase": "periodic",
-          "scalarized_return": 2482.1572265625,
+          "scalarized_return": 2491.552978515625,
           "std_vector_return": [
-            0.4864397346973419,
-            0.2366958111524582
+            5.752388954162598,
+            0.8598383665084839
           ],
-          "step": 1909760
+          "step": 1739264
         },
         {
           "completed_episodes": 7100,
           "mean_vector_return": [
-            50.6859245300293,
-            212.24009704589844
+            553.6311645507812,
+            2456.18408203125
           ],
           "phase": "periodic",
-          "scalarized_return": 212.24009704589844,
+          "scalarized_return": 2456.18408203125,
           "std_vector_return": [
-            26.990694046020508,
-            135.65724182128906
+            2.0195417404174805,
+            1.1664949655532837
           ],
-          "step": 1956096
+          "step": 1796864
         },
         {
           "completed_episodes": 7201,
           "mean_vector_return": [
-            235.0948944091797,
-            1254.2093505859375
+            473.08062744140625,
+            2484.274169921875
           ],
           "phase": "periodic",
-          "scalarized_return": 1254.2093505859375,
+          "scalarized_return": 2484.274169921875,
           "std_vector_return": [
-            200.76651000976562,
-            962.1630859375
+            0.4855310618877411,
+            0.09939183294773102
           ],
-          "step": 1977344
+          "step": 1849856
         },
         {
-          "completed_episodes": 7234,
+          "completed_episodes": 7301,
           "mean_vector_return": [
-            538.8306884765625,
-            2443.6181640625
+            481.05010986328125,
+            2464.73046875
+          ],
+          "phase": "periodic",
+          "scalarized_return": 2464.73046875,
+          "std_vector_return": [
+            0.48856303095817566,
+            0.21351854503154755
+          ],
+          "step": 1894912
+        },
+        {
+          "completed_episodes": 7405,
+          "mean_vector_return": [
+            1.5149985551834106,
+            37.259437561035156
+          ],
+          "phase": "periodic",
+          "scalarized_return": 37.259437561035156,
+          "std_vector_return": [
+            0.47313642501831055,
+            4.421020030975342
+          ],
+          "step": 1935616
+        },
+        {
+          "completed_episodes": 7500,
+          "mean_vector_return": [
+            426.1128845214844,
+            2453.295654296875
+          ],
+          "phase": "periodic",
+          "scalarized_return": 2453.295654296875,
+          "std_vector_return": [
+            7.497524738311768,
+            12.554136276245117
+          ],
+          "step": 1978624
+        },
+        {
+          "completed_episodes": 7602,
+          "mean_vector_return": [
+            56.75212478637695,
+            110.88533782958984
+          ],
+          "phase": "periodic",
+          "scalarized_return": 110.88533782958984,
+          "std_vector_return": [
+            8.161065101623535,
+            17.711444854736328
+          ],
+          "step": 1990144
+        },
+        {
+          "completed_episodes": 7700,
+          "mean_vector_return": [
+            184.5478515625,
+            52.5506477355957
+          ],
+          "phase": "periodic",
+          "scalarized_return": 52.5506477355957,
+          "std_vector_return": [
+            109.50277709960938,
+            17.866796493530273
+          ],
+          "step": 1999616
+        },
+        {
+          "completed_episodes": 7705,
+          "mean_vector_return": [
+            31.839162826538086,
+            69.45568084716797
           ],
           "phase": "training_final",
-          "scalarized_return": 2443.6181640625,
+          "scalarized_return": 69.45568084716797,
           "std_vector_return": [
-            5.309900283813477,
-            5.168673038482666
+            16.653045654296875,
+            21.82891845703125
           ],
           "step": 2000128
         }
@@ -1100,1369 +1170,1229 @@
       "smoke": false
     },
     {
-      "best_scalarized_return": 2466.851318359375,
+      "best_scalarized_return": 2563.692138671875,
       "best_std_vector_return": [
-        13.887909889221191,
-        12.294169425964355
+        14.577008247375488,
+        14.762495994567871
       ],
-      "best_step": 1979648,
+      "best_step": 1848832,
       "best_vector_return": [
-        3048.16455078125,
-        1885.5379638671875
+        3090.75732421875,
+        2036.6268310546875
       ],
       "counts": {
         "actor_optimizer_step_count": 999964,
         "actual_environment_steps": 2000128,
-        "completed_episodes": 9559,
+        "completed_episodes": 8558,
         "critic_optimizer_step_count": 1999929,
         "last_actor_loss": 0.0,
-        "last_critic_loss": 3.1689610481262207,
+        "last_critic_loss": 0.6217052936553955,
         "random_action_steps": 25088,
         "replay_size": 500000
       },
-      "elapsed_seconds": 1157.3024232387543,
+      "elapsed_seconds": 2609.3767206668854,
       "evaluation_history": [
         {
-          "completed_episodes": 106,
+          "completed_episodes": 105,
           "mean_vector_return": [
-            147.5654754638672,
-            -23.181730270385742
+            147.2095184326172,
+            -35.50925827026367
           ],
           "phase": "periodic",
-          "scalarized_return": 62.191871643066406,
+          "scalarized_return": 55.850128173828125,
           "std_vector_return": [
-            0.841131865978241,
-            0.3031156659126282
+            0.5495747327804565,
+            0.23357398808002472
           ],
           "step": 2560
         },
         {
-          "completed_episodes": 213,
+          "completed_episodes": 216,
           "mean_vector_return": [
-            156.0758514404297,
-            126.77422332763672
+            151.296875,
+            36.503448486328125
           ],
           "phase": "periodic",
-          "scalarized_return": 141.42503356933594,
+          "scalarized_return": 93.90016174316406,
           "std_vector_return": [
-            1.0336190462112427,
-            2.1738734245300293
+            0.8593778014183044,
+            0.4608593285083771
           ],
           "step": 4608
         },
         {
-          "completed_episodes": 304,
+          "completed_episodes": 307,
           "mean_vector_return": [
-            14.263354301452637,
-            236.42088317871094
+            151.05764770507812,
+            91.5456771850586
           ],
           "phase": "periodic",
-          "scalarized_return": 125.34211730957031,
+          "scalarized_return": 121.30166625976562,
           "std_vector_return": [
-            0.4360486567020416,
-            4.61234188079834
+            0.6623966693878174,
+            1.2686423063278198
           ],
           "step": 6400
         },
         {
-          "completed_episodes": 412,
+          "completed_episodes": 409,
           "mean_vector_return": [
-            84.51543426513672,
-            202.59657287597656
+            110.71195220947266,
+            359.41534423828125
           ],
           "phase": "periodic",
-          "scalarized_return": 143.55599975585938,
+          "scalarized_return": 235.0636444091797,
           "std_vector_return": [
-            73.5122299194336,
-            36.508033752441406
+            102.11473083496094,
+            238.88327026367188
           ],
           "step": 8448
         },
         {
-          "completed_episodes": 501,
+          "completed_episodes": 514,
           "mean_vector_return": [
-            150.06033325195312,
-            -34.512393951416016
+            25.204410552978516,
+            343.30682373046875
           ],
           "phase": "periodic",
-          "scalarized_return": 57.77397155761719,
+          "scalarized_return": 184.255615234375,
           "std_vector_return": [
-            0.7956448197364807,
-            0.5652614235877991
+            11.067150115966797,
+            90.25918579101562
           ],
-          "step": 10240
+          "step": 10496
         },
         {
-          "completed_episodes": 607,
+          "completed_episodes": 601,
           "mean_vector_return": [
-            149.0122528076172,
-            -54.51642990112305
+            21.67738914489746,
+            180.77635192871094
           ],
           "phase": "periodic",
-          "scalarized_return": 47.24790954589844,
+          "scalarized_return": 101.22686767578125,
           "std_vector_return": [
-            0.6802541017532349,
-            0.3349727988243103
+            7.047449111938477,
+            41.43147659301758
           ],
           "step": 12288
         },
         {
-          "completed_episodes": 707,
+          "completed_episodes": 702,
           "mean_vector_return": [
-            52.42449951171875,
-            0.1504092961549759
+            9.005484580993652,
+            123.1478271484375
           ],
           "phase": "periodic",
-          "scalarized_return": 26.28745460510254,
+          "scalarized_return": 66.07665252685547,
           "std_vector_return": [
-            0.465331494808197,
-            1.4881447553634644
+            0.9426218271255493,
+            6.466610908508301
           ],
           "step": 14080
         },
         {
-          "completed_episodes": 803,
+          "completed_episodes": 809,
           "mean_vector_return": [
-            148.12884521484375,
-            46.40521240234375
+            10.700095176696777,
+            101.37967681884766
           ],
           "phase": "periodic",
-          "scalarized_return": 97.26702880859375,
+          "scalarized_return": 56.039886474609375,
           "std_vector_return": [
-            0.8478398323059082,
-            1.7381131649017334
+            2.1653318405151367,
+            4.324368476867676
           ],
-          "step": 15872
+          "step": 16128
         },
         {
-          "completed_episodes": 913,
+          "completed_episodes": 905,
           "mean_vector_return": [
-            121.97759246826172,
-            226.1103973388672
+            14.845637321472168,
+            94.83341979980469
           ],
           "phase": "periodic",
-          "scalarized_return": 174.0439910888672,
+          "scalarized_return": 54.83952713012695,
           "std_vector_return": [
-            74.56471252441406,
-            77.77957153320312
+            0.96015864610672,
+            1.512343168258667
           ],
           "step": 18176
         },
         {
-          "completed_episodes": 1012,
+          "completed_episodes": 1010,
           "mean_vector_return": [
-            1.9203060865402222,
-            46.33917999267578
+            22.616756439208984,
+            82.81116485595703
           ],
           "phase": "periodic",
-          "scalarized_return": 24.129743576049805,
+          "scalarized_return": 52.713958740234375,
           "std_vector_return": [
-            0.8963598608970642,
-            2.247701406478882
+            1.5376840829849243,
+            0.2921658158302307
           ],
           "step": 20224
         },
         {
-          "completed_episodes": 1112,
+          "completed_episodes": 1107,
           "mean_vector_return": [
-            62.932167053222656,
-            78.75505828857422
+            11.034700393676758,
+            85.66365814208984
           ],
           "phase": "periodic",
-          "scalarized_return": 70.84361267089844,
+          "scalarized_return": 48.349178314208984,
           "std_vector_return": [
-            65.07012176513672,
-            46.257198333740234
+            0.6329602599143982,
+            0.9356660842895508
           ],
           "step": 22272
         },
         {
-          "completed_episodes": 1209,
+          "completed_episodes": 1208,
           "mean_vector_return": [
-            15.259010314941406,
-            74.37483215332031
+            11.861807823181152,
+            86.02547454833984
           ],
           "phase": "periodic",
-          "scalarized_return": 44.81692123413086,
+          "scalarized_return": 48.943641662597656,
           "std_vector_return": [
-            0.32926270365715027,
-            0.5135793089866638
+            1.3437544107437134,
+            0.6549285054206848
           ],
           "step": 24064
         },
         {
-          "completed_episodes": 1307,
+          "completed_episodes": 1305,
           "mean_vector_return": [
-            87.38819885253906,
-            313.24261474609375
+            21.690847396850586,
+            93.4800033569336
           ],
           "phase": "periodic",
-          "scalarized_return": 200.31539916992188,
+          "scalarized_return": 57.585426330566406,
           "std_vector_return": [
-            69.64363098144531,
-            68.24256134033203
+            0.982275128364563,
+            2.910813093185425
           ],
-          "step": 28672
+          "step": 26880
         },
         {
-          "completed_episodes": 1401,
+          "completed_episodes": 1404,
           "mean_vector_return": [
-            111.3209228515625,
-            360.4567565917969
+            48.85011672973633,
+            151.63845825195312
           ],
           "phase": "periodic",
-          "scalarized_return": 235.8888397216797,
+          "scalarized_return": 100.2442855834961,
           "std_vector_return": [
-            91.28760528564453,
-            186.7056884765625
+            10.242511749267578,
+            23.203155517578125
           ],
-          "step": 41216
+          "step": 30464
         },
         {
-          "completed_episodes": 1501,
+          "completed_episodes": 1500,
           "mean_vector_return": [
-            243.0603485107422,
-            457.46636962890625
+            16.425098419189453,
+            366.2931823730469
           ],
           "phase": "periodic",
-          "scalarized_return": 350.26336669921875,
+          "scalarized_return": 191.35914611816406,
           "std_vector_return": [
-            35.951194763183594,
-            32.77688217163086
+            12.967730522155762,
+            125.07173919677734
           ],
-          "step": 55552
+          "step": 33280
         },
         {
           "completed_episodes": 1600,
           "mean_vector_return": [
-            75.98137664794922,
-            203.03506469726562
+            23.2406005859375,
+            170.80731201171875
           ],
           "phase": "periodic",
-          "scalarized_return": 139.5082244873047,
+          "scalarized_return": 97.02395629882812,
           "std_vector_return": [
-            72.13745880126953,
-            137.01611328125
+            4.101719379425049,
+            108.170166015625
           ],
-          "step": 74240
+          "step": 44800
         },
         {
-          "completed_episodes": 1703,
+          "completed_episodes": 1700,
           "mean_vector_return": [
-            240.50991821289062,
-            579.2689819335938
+            140.6194305419922,
+            408.31658935546875
           ],
           "phase": "periodic",
-          "scalarized_return": 409.88946533203125,
+          "scalarized_return": 274.468017578125,
           "std_vector_return": [
-            52.034481048583984,
-            149.10031127929688
+            88.0488052368164,
+            207.63246154785156
           ],
-          "step": 83712
+          "step": 56576
         },
         {
-          "completed_episodes": 1801,
+          "completed_episodes": 1804,
           "mean_vector_return": [
-            140.7166290283203,
-            470.14141845703125
+            86.86278533935547,
+            215.1110382080078
           ],
           "phase": "periodic",
-          "scalarized_return": 305.42901611328125,
+          "scalarized_return": 150.98690795898438,
           "std_vector_return": [
-            137.02651977539062,
-            160.48074340820312
+            45.02286148071289,
+            57.000667572021484
           ],
-          "step": 100352
+          "step": 68864
         },
         {
-          "completed_episodes": 1900,
+          "completed_episodes": 1902,
           "mean_vector_return": [
-            168.4133758544922,
-            395.478759765625
+            92.15302276611328,
+            191.4063262939453
           ],
           "phase": "periodic",
-          "scalarized_return": 281.9460754394531,
+          "scalarized_return": 141.77967834472656,
           "std_vector_return": [
-            7.569515228271484,
-            7.761448383331299
+            8.597088813781738,
+            13.263519287109375
           ],
-          "step": 116480
+          "step": 77056
         },
         {
-          "completed_episodes": 2004,
+          "completed_episodes": 2000,
           "mean_vector_return": [
-            263.7214050292969,
-            789.8617553710938
+            146.4029083251953,
+            345.3321228027344
           ],
           "phase": "periodic",
-          "scalarized_return": 526.7915649414062,
+          "scalarized_return": 245.86752319335938,
           "std_vector_return": [
-            132.7108612060547,
-            364.1759033203125
+            6.299858093261719,
+            30.057659149169922
           ],
-          "step": 136192
+          "step": 86272
         },
         {
-          "completed_episodes": 2101,
+          "completed_episodes": 2100,
           "mean_vector_return": [
-            469.1171875,
-            888.84619140625
+            242.05357360839844,
+            433.3551940917969
           ],
           "phase": "periodic",
-          "scalarized_return": 678.981689453125,
+          "scalarized_return": 337.7043762207031,
           "std_vector_return": [
-            228.3275909423828,
-            275.2988586425781
+            14.150956153869629,
+            21.264450073242188
           ],
-          "step": 154112
+          "step": 97280
         },
         {
-          "completed_episodes": 2201,
+          "completed_episodes": 2200,
           "mean_vector_return": [
-            364.7231140136719,
-            559.2291870117188
+            92.77737426757812,
+            704.4987182617188
           ],
           "phase": "periodic",
-          "scalarized_return": 461.97613525390625,
+          "scalarized_return": 398.6380615234375,
           "std_vector_return": [
-            256.3333740234375,
-            210.7633819580078
+            49.792362213134766,
+            255.59109497070312
           ],
-          "step": 175616
+          "step": 115968
         },
         {
           "completed_episodes": 2300,
           "mean_vector_return": [
-            995.3087768554688,
-            1153.0770263671875
+            188.04344177246094,
+            712.3635864257812
           ],
           "phase": "periodic",
-          "scalarized_return": 1074.19287109375,
+          "scalarized_return": 450.2035217285156,
           "std_vector_return": [
-            367.46844482421875,
-            320.25787353515625
+            156.81773376464844,
+            176.4723358154297
           ],
-          "step": 197888
+          "step": 129792
         },
         {
-          "completed_episodes": 2401,
+          "completed_episodes": 2410,
           "mean_vector_return": [
-            1172.1075439453125,
-            2192.388916015625
+            11.979645729064941,
+            134.37509155273438
           ],
           "phase": "periodic",
-          "scalarized_return": 1682.248291015625,
+          "scalarized_return": 73.1773681640625,
           "std_vector_return": [
-            24.54945945739746,
-            19.676485061645508
+            0.9927915334701538,
+            4.3062920570373535
           ],
-          "step": 242944
+          "step": 138752
         },
         {
-          "completed_episodes": 2500,
+          "completed_episodes": 2501,
           "mean_vector_return": [
-            1451.8685302734375,
-            2101.00634765625
+            207.39390563964844,
+            694.7872924804688
           ],
           "phase": "periodic",
-          "scalarized_return": 1776.4375,
+          "scalarized_return": 451.0906066894531,
           "std_vector_return": [
-            11.317048072814941,
-            6.486998081207275
+            178.36305236816406,
+            306.2604064941406
           ],
-          "step": 295168
+          "step": 145920
         },
         {
           "completed_episodes": 2600,
           "mean_vector_return": [
-            1623.881591796875,
-            2150.026123046875
+            556.9531860351562,
+            924.646484375
           ],
           "phase": "periodic",
-          "scalarized_return": 1886.953857421875,
+          "scalarized_return": 740.7998046875,
           "std_vector_return": [
-            10.211758613586426,
-            6.0973944664001465
+            236.92779541015625,
+            308.8832092285156
           ],
-          "step": 338944
+          "step": 174080
         },
         {
           "completed_episodes": 2700,
           "mean_vector_return": [
-            2069.623046875,
-            1833.8619384765625
+            412.42236328125,
+            797.9419555664062
           ],
           "phase": "periodic",
-          "scalarized_return": 1951.742431640625,
+          "scalarized_return": 605.18212890625,
           "std_vector_return": [
-            11.866971015930176,
-            16.253015518188477
+            230.3438720703125,
+            460.50360107421875
           ],
-          "step": 390144
+          "step": 200192
         },
         {
-          "completed_episodes": 2801,
+          "completed_episodes": 2800,
           "mean_vector_return": [
-            345.27642822265625,
-            560.1918334960938
+            1166.0755615234375,
+            1353.8536376953125
           ],
           "phase": "periodic",
-          "scalarized_return": 452.734130859375,
+          "scalarized_return": 1259.964599609375,
           "std_vector_return": [
-            2.359780788421631,
-            3.0343546867370605
+            234.2154541015625,
+            270.2967529296875
           ],
-          "step": 430848
+          "step": 239360
         },
         {
           "completed_episodes": 2900,
           "mean_vector_return": [
-            2035.025634765625,
-            2062.557373046875
+            1257.160888671875,
+            1559.1087646484375
           ],
           "phase": "periodic",
-          "scalarized_return": 2048.79150390625,
+          "scalarized_return": 1408.134765625,
           "std_vector_return": [
-            11.454195022583008,
-            28.87470054626465
+            123.81330108642578,
+            312.0520935058594
           ],
-          "step": 465152
+          "step": 277760
         },
         {
-          "completed_episodes": 3000,
+          "completed_episodes": 3001,
           "mean_vector_return": [
-            930.0548706054688,
-            880.3551025390625
+            1515.07080078125,
+            1900.9534912109375
           ],
           "phase": "periodic",
-          "scalarized_return": 905.2049560546875,
+          "scalarized_return": 1708.01220703125,
           "std_vector_return": [
-            358.40802001953125,
-            206.44638061523438
+            54.48030471801758,
+            30.780315399169922
           ],
-          "step": 505600
+          "step": 316672
         },
         {
-          "completed_episodes": 3100,
+          "completed_episodes": 3101,
           "mean_vector_return": [
-            2273.934326171875,
-            2088.07568359375
+            1246.99609375,
+            905.3666381835938
           ],
           "phase": "periodic",
-          "scalarized_return": 2181.0048828125,
+          "scalarized_return": 1076.181396484375,
           "std_vector_return": [
-            10.018220901489258,
-            8.693800926208496
+            371.5987854003906,
+            284.2005615234375
           ],
-          "step": 558848
+          "step": 345344
         },
         {
-          "completed_episodes": 3200,
+          "completed_episodes": 3201,
           "mean_vector_return": [
-            2501.579833984375,
-            2001.890625
+            394.14324951171875,
+            567.5873413085938
           ],
           "phase": "periodic",
-          "scalarized_return": 2251.7353515625,
+          "scalarized_return": 480.86529541015625,
           "std_vector_return": [
-            9.355568885803223,
-            4.408837795257568
+            3.1302621364593506,
+            7.934290885925293
           ],
-          "step": 590848
+          "step": 378368
         },
         {
           "completed_episodes": 3300,
           "mean_vector_return": [
-            2350.5478515625,
-            2009.601806640625
+            1840.735595703125,
+            1950.6673583984375
           ],
           "phase": "periodic",
-          "scalarized_return": 2180.07470703125,
+          "scalarized_return": 1895.701416015625,
           "std_vector_return": [
-            10.863615989685059,
-            12.109237670898438
+            57.10359191894531,
+            40.63901901245117
           ],
-          "step": 609792
+          "step": 419328
         },
         {
-          "completed_episodes": 3402,
+          "completed_episodes": 3401,
           "mean_vector_return": [
-            926.0953369140625,
-            924.4540405273438
+            1874.2894287109375,
+            1889.349853515625
           ],
           "phase": "periodic",
-          "scalarized_return": 925.274658203125,
+          "scalarized_return": 1881.819580078125,
           "std_vector_return": [
-            541.1406860351562,
-            379.5947265625
+            10.669686317443848,
+            8.626545906066895
           ],
-          "step": 647168
+          "step": 462336
         },
         {
-          "completed_episodes": 3502,
+          "completed_episodes": 3500,
           "mean_vector_return": [
-            2334.0517578125,
-            1827.4691162109375
+            1971.2041015625,
+            2098.904541015625
           ],
           "phase": "periodic",
-          "scalarized_return": 2080.760498046875,
+          "scalarized_return": 2035.0543212890625,
           "std_vector_return": [
-            324.54998779296875,
-            255.8530731201172
+            6.137650966644287,
+            1.8632384538650513
           ],
-          "step": 670208
+          "step": 509184
         },
         {
-          "completed_episodes": 3600,
+          "completed_episodes": 3601,
           "mean_vector_return": [
-            1661.407470703125,
-            1425.49853515625
+            110.98786926269531,
+            263.1796569824219
           ],
           "phase": "periodic",
-          "scalarized_return": 1543.4530029296875,
+          "scalarized_return": 187.08377075195312,
           "std_vector_return": [
-            915.935546875,
-            726.3770751953125
+            2.7697556018829346,
+            8.291508674621582
           ],
-          "step": 689920
+          "step": 549376
         },
         {
           "completed_episodes": 3700,
           "mean_vector_return": [
-            114.77816009521484,
-            263.06378173828125
+            2275.744140625,
+            1949.646484375
           ],
           "phase": "periodic",
-          "scalarized_return": 188.9209747314453,
+          "scalarized_return": 2112.6953125,
           "std_vector_return": [
-            4.476772785186768,
-            7.166903495788574
+            12.89635944366455,
+            10.681294441223145
           ],
-          "step": 703232
+          "step": 573696
         },
         {
-          "completed_episodes": 3801,
+          "completed_episodes": 3802,
           "mean_vector_return": [
-            87.83171844482422,
-            234.62730407714844
+            43.82090759277344,
+            160.92129516601562
           ],
           "phase": "periodic",
-          "scalarized_return": 161.22950744628906,
+          "scalarized_return": 102.37110137939453,
           "std_vector_return": [
-            2.9092068672180176,
-            5.037959098815918
+            0.9099675416946411,
+            2.4155802726745605
           ],
-          "step": 708864
+          "step": 583936
         },
         {
-          "completed_episodes": 3905,
+          "completed_episodes": 3900,
           "mean_vector_return": [
-            109.618408203125,
-            289.4413757324219
+            445.25830078125,
+            565.4838256835938
           ],
           "phase": "periodic",
-          "scalarized_return": 199.52989196777344,
+          "scalarized_return": 505.3710632324219,
           "std_vector_return": [
-            3.8102712631225586,
-            9.640868186950684
+            5.239836692810059,
+            10.03531551361084
           ],
-          "step": 722432
+          "step": 601600
         },
         {
-          "completed_episodes": 4001,
+          "completed_episodes": 4003,
           "mean_vector_return": [
-            25.772653579711914,
-            121.54302978515625
+            876.3048095703125,
+            739.94677734375
           ],
           "phase": "periodic",
-          "scalarized_return": 73.65784454345703,
+          "scalarized_return": 808.1257934570312,
           "std_vector_return": [
-            0.8830033540725708,
-            2.69122314453125
+            768.9192504882812,
+            540.7435302734375
           ],
-          "step": 733184
+          "step": 626688
         },
         {
           "completed_episodes": 4100,
           "mean_vector_return": [
-            2174.528076171875,
-            1756.2156982421875
+            1367.9521484375,
+            1160.1588134765625
           ],
           "phase": "periodic",
-          "scalarized_return": 1965.371826171875,
+          "scalarized_return": 1264.055419921875,
           "std_vector_return": [
-            391.1120300292969,
-            282.67083740234375
+            792.737548828125,
+            553.7821044921875
           ],
-          "step": 756224
+          "step": 659712
         },
         {
           "completed_episodes": 4200,
           "mean_vector_return": [
-            169.42897033691406,
-            285.1328125
+            488.95733642578125,
+            613.3148803710938
           ],
           "phase": "periodic",
-          "scalarized_return": 227.2808837890625,
+          "scalarized_return": 551.1361083984375,
           "std_vector_return": [
-            70.26347351074219,
-            57.4911994934082
+            6.204526424407959,
+            12.532309532165527
           ],
-          "step": 783872
+          "step": 677632
         },
         {
-          "completed_episodes": 4303,
+          "completed_episodes": 4301,
           "mean_vector_return": [
-            433.727294921875,
-            457.7831115722656
+            36.424049377441406,
+            143.95774841308594
           ],
           "phase": "periodic",
-          "scalarized_return": 445.75518798828125,
+          "scalarized_return": 90.19090270996094,
           "std_vector_return": [
-            171.00611877441406,
-            86.24776458740234
+            0.6710111498832703,
+            1.4354826211929321
           ],
-          "step": 795648
+          "step": 695808
         },
         {
-          "completed_episodes": 4401,
+          "completed_episodes": 4400,
           "mean_vector_return": [
-            38.185787200927734,
-            155.81983947753906
+            1761.2415771484375,
+            1657.5830078125
           ],
           "phase": "periodic",
-          "scalarized_return": 97.00281524658203,
+          "scalarized_return": 1709.412353515625,
           "std_vector_return": [
-            0.5812148451805115,
-            1.3744248151779175
+            851.7061767578125,
+            724.8174438476562
           ],
-          "step": 804864
+          "step": 706816
         },
         {
           "completed_episodes": 4500,
           "mean_vector_return": [
-            699.1949462890625,
-            723.6058959960938
+            2377.494873046875,
+            2173.825927734375
           ],
           "phase": "periodic",
-          "scalarized_return": 711.400390625,
+          "scalarized_return": 2275.660400390625,
           "std_vector_return": [
-            2.4662835597991943,
-            3.854710340499878
+            11.760175704956055,
+            5.465811252593994
           ],
-          "step": 810240
+          "step": 740864
         },
         {
-          "completed_episodes": 4606,
+          "completed_episodes": 4601,
           "mean_vector_return": [
-            320.355224609375,
-            391.499267578125
+            2458.31884765625,
+            2092.080810546875
           ],
           "phase": "periodic",
-          "scalarized_return": 355.92724609375,
+          "scalarized_return": 2275.19970703125,
           "std_vector_return": [
-            313.75067138671875,
-            248.69410705566406
+            4.664829254150391,
+            2.5760529041290283
           ],
-          "step": 824320
+          "step": 777984
         },
         {
           "completed_episodes": 4702,
           "mean_vector_return": [
-            35.603370666503906,
-            141.46922302246094
+            37.26416015625,
+            138.8091278076172
           ],
           "phase": "periodic",
-          "scalarized_return": 88.53630065917969,
+          "scalarized_return": 88.0366439819336,
           "std_vector_return": [
-            0.43799567222595215,
-            0.33729952573776245
+            2.8518178462982178,
+            6.240198135375977
           ],
-          "step": 834816
+          "step": 814592
         },
         {
-          "completed_episodes": 4802,
+          "completed_episodes": 4800,
           "mean_vector_return": [
-            54.011810302734375,
-            147.72068786621094
+            2534.139892578125,
+            2087.556396484375
           ],
           "phase": "periodic",
-          "scalarized_return": 100.86624908447266,
+          "scalarized_return": 2310.84814453125,
           "std_vector_return": [
-            3.156073570251465,
-            3.428609609603882
+            28.770198822021484,
+            4.355538845062256
           ],
-          "step": 842496
+          "step": 829696
         },
         {
-          "completed_episodes": 4901,
+          "completed_episodes": 4900,
           "mean_vector_return": [
-            336.1256408691406,
-            450.7648620605469
+            37.95486831665039,
+            147.5641326904297
           ],
           "phase": "periodic",
-          "scalarized_return": 393.44525146484375,
+          "scalarized_return": 92.7594985961914,
           "std_vector_return": [
-            8.690953254699707,
-            8.69273853302002
+            1.789018154144287,
+            2.674065589904785
           ],
-          "step": 853248
+          "step": 873472
         },
         {
-          "completed_episodes": 5000,
+          "completed_episodes": 5001,
           "mean_vector_return": [
-            520.1439819335938,
-            558.3911743164062
+            2325.8876953125,
+            1892.2318115234375
           ],
           "phase": "periodic",
-          "scalarized_return": 539.267578125,
+          "scalarized_return": 2109.059814453125,
           "std_vector_return": [
-            19.09543228149414,
-            18.838918685913086
+            762.6998901367188,
+            583.2445678710938
           ],
-          "step": 864768
+          "step": 901632
         },
         {
-          "completed_episodes": 5104,
+          "completed_episodes": 5100,
           "mean_vector_return": [
-            828.4213256835938,
-            719.049560546875
+            306.7547302246094,
+            353.841552734375
           ],
           "phase": "periodic",
-          "scalarized_return": 773.7354736328125,
+          "scalarized_return": 330.29815673828125,
           "std_vector_return": [
-            210.49539184570312,
-            155.3439483642578
+            767.5853881835938,
+            573.4255981445312
           ],
-          "step": 881408
+          "step": 933888
         },
         {
           "completed_episodes": 5200,
           "mean_vector_return": [
-            40.36869430541992,
-            153.95603942871094
+            38.694549560546875,
+            141.88966369628906
           ],
           "phase": "periodic",
-          "scalarized_return": 97.16236877441406,
+          "scalarized_return": 90.29210662841797,
           "std_vector_return": [
-            1.8090248107910156,
-            0.4554302990436554
+            1.6746083498001099,
+            2.6907145977020264
           ],
-          "step": 894720
+          "step": 957696
         },
         {
-          "completed_episodes": 5301,
+          "completed_episodes": 5300,
           "mean_vector_return": [
-            47.67327880859375,
-            160.53729248046875
+            2664.072998046875,
+            2102.483154296875
           ],
           "phase": "periodic",
-          "scalarized_return": 104.10528564453125,
+          "scalarized_return": 2383.278076171875,
           "std_vector_return": [
-            8.68679141998291,
-            12.895777702331543
+            8.775355339050293,
+            2.836961030960083
           ],
-          "step": 910336
+          "step": 975872
         },
         {
-          "completed_episodes": 5402,
+          "completed_episodes": 5400,
           "mean_vector_return": [
-            50.781307220458984,
-            167.1433563232422
+            2731.163330078125,
+            2072.99609375
           ],
           "phase": "periodic",
-          "scalarized_return": 108.96233367919922,
+          "scalarized_return": 2402.07958984375,
           "std_vector_return": [
-            1.8741620779037476,
-            3.1531622409820557
+            37.54521560668945,
+            12.939794540405273
           ],
-          "step": 917760
+          "step": 1008896
         },
         {
           "completed_episodes": 5501,
           "mean_vector_return": [
-            45.979530334472656,
-            159.04476928710938
+            2694.07421875,
+            2083.915771484375
           ],
           "phase": "periodic",
-          "scalarized_return": 102.51214599609375,
+          "scalarized_return": 2388.9951171875,
           "std_vector_return": [
-            1.3610445261001587,
-            1.9529922008514404
+            9.64234447479248,
+            1.9619778394699097
           ],
-          "step": 923648
+          "step": 1041152
         },
         {
           "completed_episodes": 5600,
           "mean_vector_return": [
-            764.9884033203125,
-            697.8839721679688
+            2784.231201171875,
+            2053.259765625
           ],
           "phase": "periodic",
-          "scalarized_return": 731.4361572265625,
+          "scalarized_return": 2418.74560546875,
           "std_vector_return": [
-            14.820733070373535,
-            5.831122875213623
+            7.729852676391602,
+            9.492197036743164
           ],
-          "step": 937216
+          "step": 1080320
         },
         {
           "completed_episodes": 5700,
           "mean_vector_return": [
-            1225.712158203125,
-            1063.5755615234375
+            2008.0888671875,
+            1468.0750732421875
           ],
           "phase": "periodic",
-          "scalarized_return": 1144.643798828125,
+          "scalarized_return": 1738.08203125,
           "std_vector_return": [
-            672.0308837890625,
-            496.7525329589844
+            1298.640380859375,
+            875.770751953125
           ],
-          "step": 964096
+          "step": 1114368
         },
         {
-          "completed_episodes": 5801,
+          "completed_episodes": 5800,
           "mean_vector_return": [
-            782.5582885742188,
-            723.721923828125
+            2774.86865234375,
+            2112.098388671875
           ],
           "phase": "periodic",
-          "scalarized_return": 753.14013671875,
+          "scalarized_return": 2443.4833984375,
           "std_vector_return": [
-            17.324440002441406,
-            14.769094467163086
+            6.489870548248291,
+            1.4363806247711182
           ],
-          "step": 987648
+          "step": 1140224
         },
         {
-          "completed_episodes": 5900,
+          "completed_episodes": 5902,
           "mean_vector_return": [
-            12.553595542907715,
-            87.8161392211914
+            37.95446014404297,
+            141.52682495117188
           ],
           "phase": "periodic",
-          "scalarized_return": 50.18486785888672,
+          "scalarized_return": 89.74064636230469,
           "std_vector_return": [
-            1.2701157331466675,
-            3.621090888977051
+            3.748889684677124,
+            6.366819858551025
           ],
-          "step": 1012992
+          "step": 1169920
         },
         {
-          "completed_episodes": 6002,
+          "completed_episodes": 6003,
           "mean_vector_return": [
-            2340.218994140625,
-            1835.5404052734375
+            43.616790771484375,
+            146.84396362304688
           ],
           "phase": "periodic",
-          "scalarized_return": 2087.879638671875,
+          "scalarized_return": 95.23037719726562,
           "std_vector_return": [
-            678.582275390625,
-            499.4744567871094
+            8.726701736450195,
+            18.15835952758789
           ],
-          "step": 1045504
+          "step": 1180672
         },
         {
-          "completed_episodes": 6100,
+          "completed_episodes": 6101,
           "mean_vector_return": [
-            1771.3734130859375,
-            1469.4344482421875
+            2413.651123046875,
+            1894.3466796875
           ],
           "phase": "periodic",
-          "scalarized_return": 1620.4039306640625,
+          "scalarized_return": 2153.9990234375,
           "std_vector_return": [
-            1129.441650390625,
-            855.2166137695312
+            798.0424194335938,
+            593.291748046875
           ],
-          "step": 1095168
+          "step": 1204736
         },
         {
-          "completed_episodes": 6200,
+          "completed_episodes": 6201,
           "mean_vector_return": [
-            2663.122802734375,
-            2002.9744873046875
+            1869.6217041015625,
+            1376.0032958984375
           ],
           "phase": "periodic",
-          "scalarized_return": 2333.048583984375,
+          "scalarized_return": 1622.8125,
           "std_vector_return": [
-            5.681689739227295,
-            2.4536798000335693
+            1225.2960205078125,
+            845.3385009765625
           ],
-          "step": 1141248
+          "step": 1218304
         },
         {
           "completed_episodes": 6300,
           "mean_vector_return": [
-            2596.285888671875,
-            1810.055908203125
+            1461.3883056640625,
+            1129.6619873046875
           ],
           "phase": "periodic",
-          "scalarized_return": 2203.1708984375,
+          "scalarized_return": 1295.525146484375,
           "std_vector_return": [
-            773.9244995117188,
-            498.4290771484375
+            1408.6829833984375,
+            981.0752563476562
           ],
-          "step": 1187840
+          "step": 1249792
         },
         {
-          "completed_episodes": 6400,
+          "completed_episodes": 6404,
           "mean_vector_return": [
-            2836.283447265625,
-            2041.4732666015625
+            2884.779052734375,
+            2083.139404296875
           ],
           "phase": "periodic",
-          "scalarized_return": 2438.87841796875,
+          "scalarized_return": 2483.959228515625,
           "std_vector_return": [
-            13.184579849243164,
-            12.187555313110352
+            26.266660690307617,
+            20.46954917907715
           ],
-          "step": 1235712
+          "step": 1258240
         },
         {
           "completed_episodes": 6500,
           "mean_vector_return": [
-            2876.73974609375,
-            1915.58984375
+            2820.578369140625,
+            2125.57373046875
           ],
           "phase": "periodic",
-          "scalarized_return": 2396.164794921875,
+          "scalarized_return": 2473.076171875,
           "std_vector_return": [
-            12.808570861816406,
-            5.8298234939575195
+            5.1818437576293945,
+            3.8947818279266357
           ],
-          "step": 1272320
+          "step": 1291264
         },
         {
-          "completed_episodes": 6600,
+          "completed_episodes": 6601,
           "mean_vector_return": [
-            2764.797607421875,
-            1943.2529296875
+            2891.21142578125,
+            2051.751708984375
           ],
           "phase": "periodic",
-          "scalarized_return": 2354.025390625,
+          "scalarized_return": 2471.4814453125,
           "std_vector_return": [
-            12.253997802734375,
-            3.7508323192596436
+            11.038908958435059,
+            15.366817474365234
           ],
-          "step": 1319168
+          "step": 1324032
         },
         {
           "completed_episodes": 6700,
           "mean_vector_return": [
-            2839.073486328125,
-            2018.5230712890625
+            2630.540771484375,
+            1878.3221435546875
           ],
           "phase": "periodic",
-          "scalarized_return": 2428.79833984375,
+          "scalarized_return": 2254.431396484375,
           "std_vector_return": [
-            13.62148380279541,
-            18.766510009765625
+            863.1837768554688,
+            594.0128784179688
           ],
-          "step": 1362688
+          "step": 1366016
         },
         {
-          "completed_episodes": 6800,
+          "completed_episodes": 6801,
           "mean_vector_return": [
-            2395.866455078125,
-            1624.078125
+            2954.802734375,
+            2046.722900390625
           ],
           "phase": "periodic",
-          "scalarized_return": 2009.9722900390625,
+          "scalarized_return": 2500.7626953125,
           "std_vector_return": [
-            1172.552734375,
-            713.9633178710938
+            5.801018714904785,
+            4.997809886932373
           ],
-          "step": 1403648
+          "step": 1411328
         },
         {
           "completed_episodes": 6900,
           "mean_vector_return": [
-            2072.221435546875,
-            1454.56689453125
+            2973.123291015625,
+            2026.8856201171875
           ],
           "phase": "periodic",
-          "scalarized_return": 1763.3941650390625,
+          "scalarized_return": 2500.00439453125,
           "std_vector_return": [
-            1319.7120361328125,
-            830.256103515625
+            25.995014190673828,
+            25.044124603271484
           ],
-          "step": 1437184
+          "step": 1451264
         },
         {
-          "completed_episodes": 7001,
+          "completed_episodes": 7000,
           "mean_vector_return": [
-            24.63484764099121,
-            124.60675048828125
+            3055.33447265625,
+            2053.883056640625
           ],
           "phase": "periodic",
-          "scalarized_return": 74.62079620361328,
+          "scalarized_return": 2554.60888671875,
           "std_vector_return": [
-            1.3844443559646606,
-            9.23294734954834
+            14.974665641784668,
+            10.007871627807617
           ],
-          "step": 1470208
+          "step": 1487360
         },
         {
           "completed_episodes": 7100,
           "mean_vector_return": [
-            37.64207458496094,
-            140.83255004882812
+            2616.240234375,
+            1892.2791748046875
           ],
           "phase": "periodic",
-          "scalarized_return": 89.23731231689453,
+          "scalarized_return": 2254.259765625,
           "std_vector_return": [
-            0.8059574365615845,
-            1.0896029472351074
+            444.6548767089844,
+            279.83575439453125
           ],
-          "step": 1501184
+          "step": 1527296
         },
         {
-          "completed_episodes": 7201,
+          "completed_episodes": 7200,
           "mean_vector_return": [
-            41.854042053222656,
-            148.9145050048828
+            3087.4833984375,
+            2032.7255859375
           ],
           "phase": "periodic",
-          "scalarized_return": 95.38427734375,
+          "scalarized_return": 2560.1044921875,
           "std_vector_return": [
-            1.6549415588378906,
-            1.822222352027893
+            19.68152618408203,
+            6.42311954498291
           ],
-          "step": 1512448
+          "step": 1562368
         },
         {
-          "completed_episodes": 7300,
+          "completed_episodes": 7302,
           "mean_vector_return": [
-            1238.2459716796875,
-            920.7694702148438
+            327.36981201171875,
+            310.3125915527344
           ],
           "phase": "periodic",
-          "scalarized_return": 1079.5076904296875,
+          "scalarized_return": 318.8411865234375,
           "std_vector_return": [
-            1451.2716064453125,
-            918.24951171875
+            885.1962280273438,
+            538.6039428710938
           ],
-          "step": 1532928
+          "step": 1595904
         },
         {
           "completed_episodes": 7400,
           "mean_vector_return": [
-            2745.914306640625,
-            1866.2080078125
+            3123.024169921875,
+            1991.687744140625
           ],
           "phase": "periodic",
-          "scalarized_return": 2306.06103515625,
+          "scalarized_return": 2557.35595703125,
           "std_vector_return": [
-            903.5484619140625,
-            572.095458984375
+            8.145832061767578,
+            2.8538475036621094
           ],
-          "step": 1554688
+          "step": 1631232
         },
         {
           "completed_episodes": 7500,
           "mean_vector_return": [
-            27.06766128540039,
-            122.68355560302734
+            2530.892333984375,
+            1628.545166015625
           ],
           "phase": "periodic",
-          "scalarized_return": 74.8756103515625,
+          "scalarized_return": 2079.71875,
           "std_vector_return": [
-            20.149795532226562,
-            52.634681701660156
+            837.8115234375,
+            506.3769836425781
           ],
-          "step": 1602560
+          "step": 1676288
         },
         {
-          "completed_episodes": 7600,
+          "completed_episodes": 7602,
           "mean_vector_return": [
-            2941.1083984375,
-            1872.1287841796875
+            2883.53515625,
+            1772.6483154296875
           ],
           "phase": "periodic",
-          "scalarized_return": 2406.61865234375,
+          "scalarized_return": 2328.091796875,
           "std_vector_return": [
-            307.4162902832031,
-            163.07310485839844
+            950.5562744140625,
+            556.8299560546875
           ],
-          "step": 1627392
+          "step": 1714432
         },
         {
           "completed_episodes": 7701,
           "mean_vector_return": [
-            33.63498306274414,
-            130.70956420898438
+            1048.075439453125,
+            743.1618041992188
           ],
           "phase": "periodic",
-          "scalarized_return": 82.17227172851562,
+          "scalarized_return": 895.61865234375,
           "std_vector_return": [
-            1.2231273651123047,
-            1.843930959701538
-          ],
-          "step": 1647872
-        },
-        {
-          "completed_episodes": 7804,
-          "mean_vector_return": [
-            608.0296630859375,
-            499.7615661621094
-          ],
-          "phase": "periodic",
-          "scalarized_return": 553.8956298828125,
-          "std_vector_return": [
-            1151.5875244140625,
-            734.3104248046875
-          ],
-          "step": 1653504
-        },
-        {
-          "completed_episodes": 7901,
-          "mean_vector_return": [
-            54.87325668334961,
-            167.58203125
-          ],
-          "phase": "periodic",
-          "scalarized_return": 111.22764587402344,
-          "std_vector_return": [
-            3.3013434410095215,
-            3.1464078426361084
-          ],
-          "step": 1686528
-        },
-        {
-          "completed_episodes": 8001,
-          "mean_vector_return": [
-            2531.757568359375,
-            1631.306396484375
-          ],
-          "phase": "periodic",
-          "scalarized_return": 2081.531982421875,
-          "std_vector_return": [
-            1242.8076171875,
-            745.4021606445312
-          ],
-          "step": 1720064
-        },
-        {
-          "completed_episodes": 8100,
-          "mean_vector_return": [
-            -0.6685804724693298,
-            6.010375022888184
-          ],
-          "phase": "periodic",
-          "scalarized_return": 2.6708972454071045,
-          "std_vector_return": [
-            0.2883259356021881,
-            1.6585636138916016
-          ],
-          "step": 1738496
-        },
-        {
-          "completed_episodes": 8207,
-          "mean_vector_return": [
-            54.75814437866211,
-            58.565101623535156
-          ],
-          "phase": "periodic",
-          "scalarized_return": 56.66162109375,
-          "std_vector_return": [
-            112.41851043701172,
-            49.799560546875
+            1363.90869140625,
+            814.7876586914062
           ],
           "step": 1746688
         },
         {
-          "completed_episodes": 8304,
+          "completed_episodes": 7800,
           "mean_vector_return": [
-            44.896732330322266,
-            102.91031646728516
+            3037.637451171875,
+            2013.4215087890625
           ],
           "phase": "periodic",
-          "scalarized_return": 73.90352630615234,
+          "scalarized_return": 2525.529541015625,
           "std_vector_return": [
-            2.761418104171753,
-            3.200599431991577
+            8.010333061218262,
+            9.211158752441406
           ],
-          "step": 1754880
+          "step": 1777664
         },
         {
-          "completed_episodes": 8402,
+          "completed_episodes": 7903,
           "mean_vector_return": [
-            668.3711547851562,
-            415.5542907714844
+            36.76824188232422,
+            130.2145233154297
           ],
           "phase": "periodic",
-          "scalarized_return": 541.9627075195312,
+          "scalarized_return": 83.49137878417969,
           "std_vector_return": [
-            276.0912170410156,
-            100.10292053222656
+            1.230629563331604,
+            1.6007152795791626
           ],
-          "step": 1760512
+          "step": 1815552
         },
         {
-          "completed_episodes": 8502,
+          "completed_episodes": 8001,
           "mean_vector_return": [
-            28.618581771850586,
-            59.18128204345703
+            3090.75732421875,
+            2036.6268310546875
           ],
           "phase": "periodic",
-          "scalarized_return": 43.899932861328125,
+          "scalarized_return": 2563.692138671875,
           "std_vector_return": [
-            5.734118938446045,
-            4.357618808746338
+            14.577008247375488,
+            14.762495994567871
           ],
-          "step": 1775616
+          "step": 1848832
         },
         {
-          "completed_episodes": 8605,
+          "completed_episodes": 8102,
           "mean_vector_return": [
-            567.316650390625,
-            482.20831298828125
+            12.012833595275879,
+            84.53680419921875
           ],
           "phase": "periodic",
-          "scalarized_return": 524.762451171875,
+          "scalarized_return": 48.274818420410156,
           "std_vector_return": [
-            362.9326477050781,
-            248.9913787841797
+            3.5160164833068848,
+            8.691622734069824
           ],
-          "step": 1779456
+          "step": 1881344
         },
         {
-          "completed_episodes": 8701,
+          "completed_episodes": 8200,
           "mean_vector_return": [
-            41.5612678527832,
-            145.02725219726562
+            350.8564758300781,
+            312.7137756347656
           ],
           "phase": "periodic",
-          "scalarized_return": 93.29425811767578,
+          "scalarized_return": 331.7851257324219,
           "std_vector_return": [
-            2.45222806930542,
-            6.03647518157959
+            942.9407348632812,
+            545.8140258789062
           ],
-          "step": 1799680
+          "step": 1891840
         },
         {
-          "completed_episodes": 8800,
+          "completed_episodes": 8301,
           "mean_vector_return": [
-            43.31076431274414,
-            128.00596618652344
+            3105.430908203125,
+            1931.6376953125
           ],
           "phase": "periodic",
-          "scalarized_return": 85.65836334228516,
+          "scalarized_return": 2518.5341796875,
           "std_vector_return": [
-            1.7969744205474854,
-            1.0049949884414673
+            22.20352554321289,
+            7.360904216766357
           ],
-          "step": 1821696
+          "step": 1924608
         },
         {
-          "completed_episodes": 8900,
+          "completed_episodes": 8400,
           "mean_vector_return": [
-            45.42752456665039,
-            133.4514923095703
+            38.271236419677734,
+            138.86431884765625
           ],
           "phase": "periodic",
-          "scalarized_return": 89.43950653076172,
+          "scalarized_return": 88.56777954101562,
           "std_vector_return": [
-            5.2788262367248535,
-            6.488442897796631
+            2.811105251312256,
+            2.0966196060180664
           ],
-          "step": 1851648
+          "step": 1956608
         },
         {
-          "completed_episodes": 9000,
+          "completed_episodes": 8501,
           "mean_vector_return": [
-            61.52145004272461,
-            165.49154663085938
+            3099.366943359375,
+            1931.713134765625
           ],
           "phase": "periodic",
-          "scalarized_return": 113.50650024414062,
+          "scalarized_return": 2515.5400390625,
           "std_vector_return": [
-            2.13816499710083,
-            2.640537738800049
+            66.34379577636719,
+            39.45457077026367
           ],
-          "step": 1872128
+          "step": 1987840
         },
         {
-          "completed_episodes": 9100,
+          "completed_episodes": 8558,
           "mean_vector_return": [
-            52.23995590209961,
-            155.53811645507812
-          ],
-          "phase": "periodic",
-          "scalarized_return": 103.8890380859375,
-          "std_vector_return": [
-            3.4104971885681152,
-            2.790849208831787
-          ],
-          "step": 1908736
-        },
-        {
-          "completed_episodes": 9201,
-          "mean_vector_return": [
-            2924.443359375,
-            1921.170166015625
-          ],
-          "phase": "periodic",
-          "scalarized_return": 2422.806640625,
-          "std_vector_return": [
-            60.766990661621094,
-            47.9041748046875
-          ],
-          "step": 1923072
-        },
-        {
-          "completed_episodes": 9303,
-          "mean_vector_return": [
-            44.21879577636719,
-            138.63229370117188
-          ],
-          "phase": "periodic",
-          "scalarized_return": 91.42554473876953,
-          "std_vector_return": [
-            2.048767566680908,
-            6.701127052307129
-          ],
-          "step": 1927936
-        },
-        {
-          "completed_episodes": 9400,
-          "mean_vector_return": [
-            58.36151885986328,
-            155.03587341308594
-          ],
-          "phase": "periodic",
-          "scalarized_return": 106.69869995117188,
-          "std_vector_return": [
-            3.597134590148926,
-            2.9845199584960938
-          ],
-          "step": 1934080
-        },
-        {
-          "completed_episodes": 9500,
-          "mean_vector_return": [
-            3048.16455078125,
-            1885.5379638671875
-          ],
-          "phase": "periodic",
-          "scalarized_return": 2466.851318359375,
-          "std_vector_return": [
-            13.887909889221191,
-            12.294169425964355
-          ],
-          "step": 1979648
-        },
-        {
-          "completed_episodes": 9559,
-          "mean_vector_return": [
-            2516.2919921875,
-            1553.6114501953125
+            3028.304931640625,
+            1873.550048828125
           ],
           "phase": "training_final",
-          "scalarized_return": 2034.95166015625,
+          "scalarized_return": 2450.927490234375,
           "std_vector_return": [
-            1250.349609375,
-            722.7699584960938
+            17.053674697875977,
+            9.273275375366211
           ],
           "step": 2000128
         }
@@ -2482,2349 +2412,1215 @@
       "smoke": false
     },
     {
-      "best_scalarized_return": 3336.763671875,
+      "best_scalarized_return": 3629.1171875,
       "best_std_vector_return": [
-        22.251955032348633,
-        12.320133209228516
+        67.6728286743164,
+        16.592649459838867
       ],
-      "best_step": 1431296,
+      "best_step": 1899520,
       "best_vector_return": [
-        3336.763671875,
-        794.997802734375
+        3629.1171875,
+        467.25341796875
       ],
       "counts": {
         "actor_optimizer_step_count": 999964,
         "actual_environment_steps": 2000128,
-        "completed_episodes": 16551,
+        "completed_episodes": 8427,
         "critic_optimizer_step_count": 1999929,
         "last_actor_loss": 0.0,
-        "last_critic_loss": 6.760151386260986,
+        "last_critic_loss": 1.5074089765548706,
         "random_action_steps": 25088,
         "replay_size": 500000
       },
-      "elapsed_seconds": 1177.185540676117,
+      "elapsed_seconds": 2627.262590646744,
       "evaluation_history": [
         {
-          "completed_episodes": 103,
+          "completed_episodes": 104,
           "mean_vector_return": [
-            -15.448874473571777,
-            -52.75471878051758
+            -15.192387580871582,
+            -81.10063171386719
           ],
           "phase": "periodic",
-          "scalarized_return": -15.448874473571777,
+          "scalarized_return": -15.192387580871582,
           "std_vector_return": [
-            0.6115366816520691,
-            0.24285010993480682
+            0.6057168245315552,
+            0.8713476061820984
           ],
           "step": 2560
         },
         {
           "completed_episodes": 200,
           "mean_vector_return": [
-            24.856441497802734,
-            96.29951477050781
+            32.70992660522461,
+            70.55669403076172
           ],
           "phase": "periodic",
-          "scalarized_return": 24.856441497802734,
+          "scalarized_return": 32.70992660522461,
           "std_vector_return": [
-            0.736139714717865,
-            2.708367109298706
+            0.48523953557014465,
+            0.7475593686103821
           ],
           "step": 4608
         },
         {
-          "completed_episodes": 308,
+          "completed_episodes": 302,
           "mean_vector_return": [
-            221.94277954101562,
-            49.78463363647461
+            327.5656433105469,
+            618.716552734375
           ],
           "phase": "periodic",
-          "scalarized_return": 221.94277954101562,
+          "scalarized_return": 327.5656433105469,
           "std_vector_return": [
-            3.589308738708496,
-            4.097606182098389
+            114.06525421142578,
+            181.30894470214844
           ],
-          "step": 6656
+          "step": 6400
         },
         {
-          "completed_episodes": 407,
+          "completed_episodes": 415,
           "mean_vector_return": [
-            176.72276306152344,
-            -14.780572891235352
+            162.70736694335938,
+            -17.44038963317871
           ],
           "phase": "periodic",
-          "scalarized_return": 176.72276306152344,
+          "scalarized_return": 162.70736694335938,
           "std_vector_return": [
-            2.543117046356201,
-            1.7036988735198975
+            1.2385066747665405,
+            0.1832057684659958
           ],
           "step": 8448
         },
         {
-          "completed_episodes": 505,
+          "completed_episodes": 508,
           "mean_vector_return": [
-            -16.83778190612793,
-            -13.406628608703613
+            174.88771057128906,
+            12.918678283691406
           ],
           "phase": "periodic",
-          "scalarized_return": -16.83778190612793,
+          "scalarized_return": 174.88771057128906,
           "std_vector_return": [
-            0.32731103897094727,
-            0.9677050709724426
+            1.7482843399047852,
+            0.5309717655181885
           ],
           "step": 10240
         },
         {
-          "completed_episodes": 600,
+          "completed_episodes": 606,
           "mean_vector_return": [
-            -10.271201133728027,
-            -49.493534088134766
+            31.657041549682617,
+            106.02205657958984
           ],
           "phase": "periodic",
-          "scalarized_return": -10.271201133728027,
+          "scalarized_return": 31.657041549682617,
           "std_vector_return": [
-            1.124677300453186,
-            2.2631804943084717
+            12.321528434753418,
+            47.0864372253418
           ],
           "step": 12032
         },
         {
-          "completed_episodes": 704,
+          "completed_episodes": 707,
           "mean_vector_return": [
-            49.1609992980957,
-            266.3697204589844
+            192.826171875,
+            37.59413146972656
           ],
           "phase": "periodic",
-          "scalarized_return": 49.1609992980957,
+          "scalarized_return": 192.826171875,
           "std_vector_return": [
-            3.248070478439331,
-            7.414048671722412
+            1.926101803779602,
+            1.5559804439544678
           ],
           "step": 14336
         },
         {
-          "completed_episodes": 809,
+          "completed_episodes": 800,
           "mean_vector_return": [
-            148.5616455078125,
-            -61.21173095703125
+            124.6968002319336,
+            -58.245513916015625
           ],
           "phase": "periodic",
-          "scalarized_return": 148.5616455078125,
+          "scalarized_return": 124.6968002319336,
           "std_vector_return": [
-            0.48737242817878723,
-            0.5744245648384094
+            95.28800964355469,
+            31.403932571411133
           ],
-          "step": 16384
+          "step": 16128
         },
         {
-          "completed_episodes": 906,
+          "completed_episodes": 910,
           "mean_vector_return": [
-            166.2025146484375,
-            -158.62022399902344
+            52.929779052734375,
+            -25.944995880126953
           ],
           "phase": "periodic",
-          "scalarized_return": 166.2025146484375,
+          "scalarized_return": 52.929779052734375,
           "std_vector_return": [
-            31.44492530822754,
-            46.5423583984375
+            0.38249555230140686,
+            0.9859240055084229
           ],
           "step": 18432
         },
         {
-          "completed_episodes": 1017,
+          "completed_episodes": 1016,
           "mean_vector_return": [
-            144.58775329589844,
-            -25.228897094726562
+            146.42149353027344,
+            -25.6456241607666
           ],
           "phase": "periodic",
-          "scalarized_return": 144.58775329589844,
+          "scalarized_return": 146.42149353027344,
           "std_vector_return": [
-            0.8599264025688171,
-            1.6846551895141602
+            0.9647014141082764,
+            0.3581292927265167
           ],
           "step": 20480
         },
         {
-          "completed_episodes": 1105,
+          "completed_episodes": 1103,
           "mean_vector_return": [
-            148.4499053955078,
-            -1.8637371063232422
+            145.5553436279297,
+            -36.15025329589844
           ],
           "phase": "periodic",
-          "scalarized_return": 148.4499053955078,
+          "scalarized_return": 145.5553436279297,
           "std_vector_return": [
-            0.3632248640060425,
-            0.3396427035331726
+            0.535618782043457,
+            0.3286439776420593
           ],
           "step": 22272
         },
         {
-          "completed_episodes": 1202,
+          "completed_episodes": 1204,
           "mean_vector_return": [
-            25.602285385131836,
-            75.037109375
+            148.348876953125,
+            -73.50212097167969
           ],
           "phase": "periodic",
-          "scalarized_return": 25.602285385131836,
+          "scalarized_return": 148.348876953125,
           "std_vector_return": [
-            21.550174713134766,
-            31.184608459472656
+            0.6865389347076416,
+            0.5971347689628601
           ],
           "step": 24320
         },
         {
-          "completed_episodes": 1300,
+          "completed_episodes": 1304,
           "mean_vector_return": [
-            6.2471394538879395,
-            263.8771057128906
+            57.398773193359375,
+            103.26033020019531
           ],
           "phase": "periodic",
-          "scalarized_return": 6.2471394538879395,
+          "scalarized_return": 57.398773193359375,
           "std_vector_return": [
-            26.634248733520508,
-            16.405223846435547
+            2.3544886112213135,
+            3.9794578552246094
           ],
-          "step": 34816
+          "step": 36352
         },
         {
-          "completed_episodes": 1403,
+          "completed_episodes": 1404,
           "mean_vector_return": [
-            62.05155563354492,
-            142.88792419433594
+            187.64068603515625,
+            239.0153350830078
           ],
           "phase": "periodic",
-          "scalarized_return": 62.05155563354492,
+          "scalarized_return": 187.64068603515625,
           "std_vector_return": [
-            42.49753952026367,
-            71.98138427734375
+            39.587215423583984,
+            33.89272689819336
           ],
-          "step": 41984
+          "step": 46592
         },
         {
           "completed_episodes": 1500,
           "mean_vector_return": [
-            169.6534423828125,
-            175.64414978027344
+            177.73171997070312,
+            376.2705993652344
           ],
           "phase": "periodic",
-          "scalarized_return": 169.6534423828125,
+          "scalarized_return": 177.73171997070312,
           "std_vector_return": [
-            10.008974075317383,
-            23.92793083190918
+            46.29200744628906,
+            46.248416900634766
           ],
-          "step": 52480
+          "step": 57344
         },
         {
-          "completed_episodes": 1606,
+          "completed_episodes": 1601,
           "mean_vector_return": [
-            145.4519805908203,
-            329.9118957519531
+            154.15914916992188,
+            245.0995635986328
           ],
           "phase": "periodic",
-          "scalarized_return": 145.4519805908203,
+          "scalarized_return": 154.15914916992188,
           "std_vector_return": [
-            1.9588888883590698,
-            5.419765949249268
+            30.18512725830078,
+            42.64518737792969
           ],
-          "step": 61952
+          "step": 69376
         },
         {
-          "completed_episodes": 1702,
+          "completed_episodes": 1700,
           "mean_vector_return": [
-            88.24348449707031,
-            186.13491821289062
+            169.38787841796875,
+            429.6358337402344
           ],
           "phase": "periodic",
-          "scalarized_return": 88.24348449707031,
+          "scalarized_return": 169.38787841796875,
           "std_vector_return": [
-            2.1533470153808594,
-            4.716219425201416
+            95.17416381835938,
+            77.81060028076172
           ],
-          "step": 73984
+          "step": 82432
         },
         {
-          "completed_episodes": 1801,
+          "completed_episodes": 1800,
           "mean_vector_return": [
-            197.33865356445312,
-            336.7746276855469
+            253.24021911621094,
+            211.35447692871094
           ],
           "phase": "periodic",
-          "scalarized_return": 197.33865356445312,
+          "scalarized_return": 253.24021911621094,
           "std_vector_return": [
-            5.17448616027832,
-            7.754839897155762
+            12.945568084716797,
+            14.385489463806152
           ],
-          "step": 82944
+          "step": 92416
         },
         {
-          "completed_episodes": 1902,
+          "completed_episodes": 1903,
           "mean_vector_return": [
-            167.94105529785156,
-            182.4174041748047
+            224.2109375,
+            179.49514770507812
           ],
           "phase": "periodic",
-          "scalarized_return": 167.94105529785156,
+          "scalarized_return": 224.2109375,
           "std_vector_return": [
-            1.7147386074066162,
-            1.7962803840637207
+            66.23037719726562,
+            31.358095169067383
           ],
-          "step": 94976
+          "step": 104448
         },
         {
-          "completed_episodes": 2001,
+          "completed_episodes": 2003,
           "mean_vector_return": [
-            273.45672607421875,
-            286.4005432128906
+            52.08869171142578,
+            114.36467742919922
           ],
           "phase": "periodic",
-          "scalarized_return": 273.45672607421875,
+          "scalarized_return": 52.08869171142578,
           "std_vector_return": [
-            65.49786376953125,
-            46.33254623413086
+            15.23666763305664,
+            23.46742820739746
           ],
-          "step": 105472
+          "step": 114432
         },
         {
-          "completed_episodes": 2101,
+          "completed_episodes": 2100,
           "mean_vector_return": [
-            222.0322265625,
-            275.69482421875
+            305.5829772949219,
+            292.1590270996094
           ],
           "phase": "periodic",
-          "scalarized_return": 222.0322265625,
+          "scalarized_return": 305.5829772949219,
           "std_vector_return": [
-            6.228438854217529,
-            10.003585815429688
+            277.0206298828125,
+            200.0407257080078
           ],
-          "step": 120064
+          "step": 123648
         },
         {
-          "completed_episodes": 2201,
+          "completed_episodes": 2200,
           "mean_vector_return": [
-            289.6858825683594,
-            196.28298950195312
+            419.3619079589844,
+            384.830322265625
           ],
           "phase": "periodic",
-          "scalarized_return": 289.6858825683594,
+          "scalarized_return": 419.3619079589844,
           "std_vector_return": [
-            16.281696319580078,
-            10.728559494018555
+            171.29527282714844,
+            140.98348999023438
           ],
-          "step": 131840
+          "step": 143104
         },
         {
-          "completed_episodes": 2302,
+          "completed_episodes": 2301,
           "mean_vector_return": [
-            266.74151611328125,
-            246.52403259277344
+            385.4803161621094,
+            396.07373046875
           ],
           "phase": "periodic",
-          "scalarized_return": 266.74151611328125,
+          "scalarized_return": 385.4803161621094,
           "std_vector_return": [
-            19.49857521057129,
-            55.94753646850586
+            53.3206787109375,
+            23.196571350097656
           ],
-          "step": 144896
+          "step": 163584
         },
         {
-          "completed_episodes": 2400,
+          "completed_episodes": 2401,
           "mean_vector_return": [
-            333.9810485839844,
-            377.5748596191406
+            843.6412353515625,
+            422.8271484375
           ],
           "phase": "periodic",
-          "scalarized_return": 333.9810485839844,
+          "scalarized_return": 843.6412353515625,
           "std_vector_return": [
-            146.78121948242188,
-            188.49388122558594
+            539.6424560546875,
+            249.1042022705078
           ],
-          "step": 164096
+          "step": 188160
         },
         {
-          "completed_episodes": 2502,
+          "completed_episodes": 2500,
           "mean_vector_return": [
-            365.6299133300781,
-            594.7427368164062
+            348.95684814453125,
+            287.142822265625
           ],
           "phase": "periodic",
-          "scalarized_return": 365.6299133300781,
+          "scalarized_return": 348.95684814453125,
           "std_vector_return": [
-            77.0418701171875,
-            86.65286254882812
+            442.036376953125,
+            213.3395538330078
           ],
-          "step": 176640
+          "step": 218624
         },
         {
           "completed_episodes": 2600,
           "mean_vector_return": [
-            493.2337341308594,
-            535.0081787109375
+            35.33944320678711,
+            35.48623275756836
           ],
           "phase": "periodic",
-          "scalarized_return": 493.2337341308594,
+          "scalarized_return": 35.33944320678711,
           "std_vector_return": [
-            231.18728637695312,
-            148.57562255859375
+            3.276740789413452,
+            3.2460317611694336
           ],
-          "step": 192768
+          "step": 253952
         },
         {
-          "completed_episodes": 2700,
+          "completed_episodes": 2702,
           "mean_vector_return": [
-            372.1983337402344,
-            232.9740753173828
+            639.8807983398438,
+            321.177490234375
           ],
           "phase": "periodic",
-          "scalarized_return": 372.1983337402344,
+          "scalarized_return": 639.8807983398438,
           "std_vector_return": [
-            49.336490631103516,
-            25.739667892456055
+            706.6025390625,
+            215.62867736816406
           ],
-          "step": 205568
+          "step": 291584
         },
         {
-          "completed_episodes": 2800,
+          "completed_episodes": 2801,
           "mean_vector_return": [
-            530.657470703125,
-            382.9821472167969
+            439.049560546875,
+            225.65774536132812
           ],
           "phase": "periodic",
-          "scalarized_return": 530.657470703125,
+          "scalarized_return": 439.049560546875,
           "std_vector_return": [
-            193.8410186767578,
-            117.61943054199219
+            242.8148956298828,
+            84.94686889648438
           ],
-          "step": 231680
+          "step": 312320
         },
         {
           "completed_episodes": 2900,
           "mean_vector_return": [
-            1231.6390380859375,
-            627.207763671875
+            1621.51904296875,
+            733.6868286132812
           ],
           "phase": "periodic",
-          "scalarized_return": 1231.6390380859375,
+          "scalarized_return": 1621.51904296875,
           "std_vector_return": [
-            434.1764831542969,
-            190.0636444091797
+            562.1354370117188,
+            219.43321228027344
           ],
-          "step": 256256
+          "step": 353280
         },
         {
-          "completed_episodes": 3000,
+          "completed_episodes": 3002,
           "mean_vector_return": [
-            27.635465621948242,
-            73.70552825927734
+            2099.416748046875,
+            886.9080200195312
           ],
           "phase": "periodic",
-          "scalarized_return": 27.635465621948242,
+          "scalarized_return": 2099.416748046875,
           "std_vector_return": [
-            2.6137783527374268,
-            2.668269157409668
+            21.94029998779297,
+            23.818235397338867
           ],
-          "step": 289792
+          "step": 382976
         },
         {
-          "completed_episodes": 3100,
+          "completed_episodes": 3101,
           "mean_vector_return": [
-            1702.1824951171875,
-            611.9312744140625
+            825.2323608398438,
+            198.6720428466797
           ],
           "phase": "periodic",
-          "scalarized_return": 1702.1824951171875,
+          "scalarized_return": 825.2323608398438,
           "std_vector_return": [
-            387.00579833984375,
-            184.9560546875
+            383.6386413574219,
+            55.90311050415039
           ],
-          "step": 328192
+          "step": 411136
         },
         {
-          "completed_episodes": 3201,
+          "completed_episodes": 3202,
           "mean_vector_return": [
-            2257.36865234375,
-            693.2567138671875
+            2265.347412109375,
+            747.8262939453125
           ],
           "phase": "periodic",
-          "scalarized_return": 2257.36865234375,
+          "scalarized_return": 2265.347412109375,
           "std_vector_return": [
-            46.64750671386719,
-            41.302982330322266
+            68.76335144042969,
+            63.10869216918945
           ],
-          "step": 366080
+          "step": 435712
         },
         {
-          "completed_episodes": 3301,
+          "completed_episodes": 3300,
           "mean_vector_return": [
-            2173.779052734375,
-            500.4999084472656
+            898.8779296875,
+            313.4030456542969
           ],
           "phase": "periodic",
-          "scalarized_return": 2173.779052734375,
+          "scalarized_return": 898.8779296875,
           "std_vector_return": [
-            291.1872863769531,
-            76.14093780517578
+            481.757568359375,
+            81.72250366210938
           ],
-          "step": 400128
+          "step": 455680
         },
         {
-          "completed_episodes": 3403,
+          "completed_episodes": 3400,
           "mean_vector_return": [
-            1085.22021484375,
-            350.9692687988281
+            47.121788024902344,
+            54.20427322387695
           ],
           "phase": "periodic",
-          "scalarized_return": 1085.22021484375,
+          "scalarized_return": 47.121788024902344,
           "std_vector_return": [
-            974.7913818359375,
-            187.13165283203125
+            1.4057211875915527,
+            1.6506048440933228
           ],
-          "step": 441088
+          "step": 476672
         },
         {
-          "completed_episodes": 3500,
+          "completed_episodes": 3501,
           "mean_vector_return": [
-            68.85563659667969,
-            69.25550842285156
+            279.7987060546875,
+            111.87703704833984
           ],
           "phase": "periodic",
-          "scalarized_return": 68.85563659667969,
+          "scalarized_return": 279.7987060546875,
           "std_vector_return": [
-            3.270007610321045,
-            1.8267855644226074
+            5.58453369140625,
+            5.163196563720703
           ],
-          "step": 456192
+          "step": 499968
         },
         {
-          "completed_episodes": 3601,
+          "completed_episodes": 3600,
           "mean_vector_return": [
-            2525.763671875,
-            664.7742309570312
+            1185.1834716796875,
+            542.796875
           ],
           "phase": "periodic",
-          "scalarized_return": 2525.763671875,
+          "scalarized_return": 1185.1834716796875,
           "std_vector_return": [
-            128.08311462402344,
-            25.46366310119629
+            695.678466796875,
+            228.43157958984375
           ],
-          "step": 495104
+          "step": 531200
         },
         {
-          "completed_episodes": 3704,
+          "completed_episodes": 3701,
           "mean_vector_return": [
-            175.54222106933594,
-            109.50902557373047
+            1232.9769287109375,
+            418.9593811035156
           ],
           "phase": "periodic",
-          "scalarized_return": 175.54222106933594,
+          "scalarized_return": 1232.9769287109375,
           "std_vector_return": [
-            173.75448608398438,
-            85.75888061523438
+            796.291015625,
+            267.55096435546875
           ],
-          "step": 523008
+          "step": 549376
         },
         {
           "completed_episodes": 3800,
           "mean_vector_return": [
-            1641.2347412109375,
-            451.20562744140625
+            1256.6171875,
+            395.6814880371094
           ],
           "phase": "periodic",
-          "scalarized_return": 1641.2347412109375,
+          "scalarized_return": 1256.6171875,
           "std_vector_return": [
-            744.30224609375,
-            146.25192260742188
+            1002.4066772460938,
+            271.72088623046875
           ],
-          "step": 532480
+          "step": 560384
         },
         {
-          "completed_episodes": 3902,
+          "completed_episodes": 3900,
           "mean_vector_return": [
-            1605.0985107421875,
-            568.6367797851562
+            906.7863159179688,
+            285.052001953125
           ],
           "phase": "periodic",
-          "scalarized_return": 1605.0985107421875,
+          "scalarized_return": 906.7863159179688,
           "std_vector_return": [
-            827.2606811523438,
-            249.54364013671875
+            162.93069458007812,
+            47.87807846069336
           ],
-          "step": 557056
+          "step": 580096
         },
         {
           "completed_episodes": 4000,
           "mean_vector_return": [
-            1685.5711669921875,
-            563.6356811523438
+            666.2462768554688,
+            187.51953125
           ],
           "phase": "periodic",
-          "scalarized_return": 1685.5711669921875,
+          "scalarized_return": 666.2462768554688,
           "std_vector_return": [
-            845.5167846679688,
-            218.11331176757812
+            672.649658203125,
+            184.67556762695312
           ],
-          "step": 587520
+          "step": 607232
         },
         {
           "completed_episodes": 4100,
           "mean_vector_return": [
-            1229.3890380859375,
-            437.6237487792969
+            959.3955078125,
+            340.3736572265625
           ],
           "phase": "periodic",
-          "scalarized_return": 1229.3890380859375,
+          "scalarized_return": 959.3955078125,
           "std_vector_return": [
-            1000.8648681640625,
-            288.7063903808594
+            640.1807250976562,
+            236.4747314453125
           ],
-          "step": 606720
+          "step": 626944
         },
         {
-          "completed_episodes": 4204,
+          "completed_episodes": 4202,
           "mean_vector_return": [
-            470.1162109375,
-            220.4026336669922
+            63.7297248840332,
+            27.032079696655273
           ],
           "phase": "periodic",
-          "scalarized_return": 470.1162109375,
+          "scalarized_return": 63.7297248840332,
           "std_vector_return": [
-            146.68740844726562,
-            44.98236846923828
+            9.419225692749023,
+            2.093989372253418
           ],
-          "step": 627712
+          "step": 636928
         },
         {
           "completed_episodes": 4300,
           "mean_vector_return": [
-            899.0203247070312,
-            318.8366394042969
+            494.8743591308594,
+            155.7267303466797
           ],
           "phase": "periodic",
-          "scalarized_return": 899.0203247070312,
+          "scalarized_return": 494.8743591308594,
           "std_vector_return": [
-            170.4547119140625,
-            42.4819450378418
+            189.00144958496094,
+            50.85734558105469
           ],
-          "step": 643584
+          "step": 667648
         },
         {
-          "completed_episodes": 4402,
+          "completed_episodes": 4400,
           "mean_vector_return": [
-            36.689144134521484,
-            55.240394592285156
+            2006.5924072265625,
+            452.21881103515625
           ],
           "phase": "periodic",
-          "scalarized_return": 36.689144134521484,
+          "scalarized_return": 2006.5924072265625,
           "std_vector_return": [
-            1.488472819328308,
-            0.720448911190033
+            734.5867919921875,
+            184.9366912841797
           ],
-          "step": 657920
+          "step": 699904
         },
         {
           "completed_episodes": 4500,
           "mean_vector_return": [
-            39.4660758972168,
-            71.78712463378906
+            462.6817932128906,
+            125.07258605957031
           ],
           "phase": "periodic",
-          "scalarized_return": 39.4660758972168,
+          "scalarized_return": 462.6817932128906,
           "std_vector_return": [
-            1.0842750072479248,
-            4.019198894500732
+            611.1607666015625,
+            121.85072326660156
           ],
-          "step": 669184
+          "step": 725248
         },
         {
-          "completed_episodes": 4602,
+          "completed_episodes": 4603,
           "mean_vector_return": [
-            36.01948547363281,
-            61.8029670715332
+            483.0099182128906,
+            122.90541076660156
           ],
           "phase": "periodic",
-          "scalarized_return": 36.01948547363281,
+          "scalarized_return": 483.0099182128906,
           "std_vector_return": [
-            1.5586433410644531,
-            2.2607502937316895
+            833.3658447265625,
+            182.49127197265625
           ],
-          "step": 675328
+          "step": 740608
         },
         {
-          "completed_episodes": 4708,
+          "completed_episodes": 4702,
           "mean_vector_return": [
-            2278.151123046875,
-            685.3920288085938
+            2181.499755859375,
+            536.7576904296875
           ],
           "phase": "periodic",
-          "scalarized_return": 2278.151123046875,
+          "scalarized_return": 2181.499755859375,
           "std_vector_return": [
-            833.2670288085938,
-            204.44802856445312
+            761.2409057617188,
+            172.48062133789062
           ],
-          "step": 679936
+          "step": 755712
         },
         {
-          "completed_episodes": 4800,
+          "completed_episodes": 4805,
           "mean_vector_return": [
-            821.9539184570312,
-            274.4073181152344
+            2055.779052734375,
+            460.6159362792969
           ],
           "phase": "periodic",
-          "scalarized_return": 821.9539184570312,
+          "scalarized_return": 2055.779052734375,
           "std_vector_return": [
-            718.1182861328125,
-            224.23402404785156
+            455.2228088378906,
+            83.75048065185547
           ],
-          "step": 709120
+          "step": 768768
         },
         {
           "completed_episodes": 4900,
           "mean_vector_return": [
-            394.4388122558594,
-            170.99530029296875
+            35.39921188354492,
+            28.9749813079834
           ],
           "phase": "periodic",
-          "scalarized_return": 394.4388122558594,
+          "scalarized_return": 35.39921188354492,
           "std_vector_return": [
-            10.499442100524902,
-            15.698512077331543
+            6.740612506866455,
+            4.186455726623535
           ],
-          "step": 717056
+          "step": 796672
         },
         {
-          "completed_episodes": 5001,
+          "completed_episodes": 5005,
           "mean_vector_return": [
-            2578.732421875,
-            701.6683349609375
+            32.8668098449707,
+            46.81611251831055
           ],
           "phase": "periodic",
-          "scalarized_return": 2578.732421875,
+          "scalarized_return": 32.8668098449707,
           "std_vector_return": [
-            873.6041870117188,
-            207.69898986816406
+            0.20954184234142303,
+            0.7276871800422668
           ],
-          "step": 743424
+          "step": 806912
         },
         {
           "completed_episodes": 5100,
           "mean_vector_return": [
-            1471.2972412109375,
-            424.2893981933594
+            2632.83251953125,
+            593.6304321289062
           ],
           "phase": "periodic",
-          "scalarized_return": 1471.2972412109375,
+          "scalarized_return": 2632.83251953125,
           "std_vector_return": [
-            1426.447509765625,
-            336.62286376953125
+            271.1037292480469,
+            122.91636657714844
           ],
-          "step": 754944
+          "step": 820736
         },
         {
           "completed_episodes": 5200,
           "mean_vector_return": [
-            2897.966552734375,
-            715.3242797851562
+            658.6710815429688,
+            194.61505126953125
           ],
           "phase": "periodic",
-          "scalarized_return": 2897.966552734375,
+          "scalarized_return": 658.6710815429688,
           "std_vector_return": [
-            30.0015811920166,
-            23.55563735961914
+            676.7752685546875,
+            185.1763458251953
           ],
-          "step": 777472
+          "step": 842240
         },
         {
-          "completed_episodes": 5300,
+          "completed_episodes": 5301,
           "mean_vector_return": [
-            395.6866760253906,
-            173.17552185058594
+            1235.7340087890625,
+            347.54766845703125
           ],
           "phase": "periodic",
-          "scalarized_return": 395.6866760253906,
+          "scalarized_return": 1235.7340087890625,
           "std_vector_return": [
-            13.780601501464844,
-            6.982442855834961
+            590.22509765625,
+            140.97869873046875
           ],
-          "step": 795392
+          "step": 870656
         },
         {
-          "completed_episodes": 5400,
+          "completed_episodes": 5401,
           "mean_vector_return": [
-            672.6635131835938,
-            239.9275360107422
+            43.923797607421875,
+            41.890750885009766
           ],
           "phase": "periodic",
-          "scalarized_return": 672.6635131835938,
+          "scalarized_return": 43.923797607421875,
           "std_vector_return": [
-            806.6325073242188,
-            190.80587768554688
+            1.7936639785766602,
+            1.0875959396362305
           ],
-          "step": 812288
+          "step": 901120
         },
         {
-          "completed_episodes": 5503,
+          "completed_episodes": 5501,
           "mean_vector_return": [
-            50.49813461303711,
-            70.82386779785156
+            1547.5833740234375,
+            415.9393005371094
           ],
           "phase": "periodic",
-          "scalarized_return": 50.49813461303711,
+          "scalarized_return": 1547.5833740234375,
           "std_vector_return": [
-            2.6059656143188477,
-            3.164355993270874
+            926.420166015625,
+            206.63726806640625
           ],
-          "step": 822016
+          "step": 916480
         },
         {
           "completed_episodes": 5600,
           "mean_vector_return": [
-            2568.6630859375,
-            668.7732543945312
+            497.3887634277344,
+            159.69371032714844
           ],
           "phase": "periodic",
-          "scalarized_return": 2568.6630859375,
+          "scalarized_return": 497.3887634277344,
           "std_vector_return": [
-            865.719482421875,
-            197.03236389160156
+            778.25537109375,
+            202.3711700439453
           ],
-          "step": 828672
+          "step": 950528
         },
         {
           "completed_episodes": 5700,
           "mean_vector_return": [
-            757.0814819335938,
-            255.57498168945312
+            2922.727294921875,
+            606.0319213867188
           ],
           "phase": "periodic",
-          "scalarized_return": 757.0814819335938,
+          "scalarized_return": 2922.727294921875,
           "std_vector_return": [
-            316.5682067871094,
-            75.87065124511719
+            27.010478973388672,
+            40.79045104980469
           ],
-          "step": 843008
+          "step": 970752
         },
         {
-          "completed_episodes": 5800,
+          "completed_episodes": 5801,
           "mean_vector_return": [
-            34.557350158691406,
-            68.34656524658203
+            2358.083740234375,
+            542.7120971679688
           ],
           "phase": "periodic",
-          "scalarized_return": 34.557350158691406,
+          "scalarized_return": 2358.083740234375,
           "std_vector_return": [
-            2.2811620235443115,
-            1.2285244464874268
+            459.8863830566406,
+            151.59378051757812
           ],
-          "step": 849152
+          "step": 995584
         },
         {
           "completed_episodes": 5900,
           "mean_vector_return": [
-            637.7324829101562,
-            242.0551300048828
+            3075.402587890625,
+            645.65869140625
           ],
           "phase": "periodic",
-          "scalarized_return": 637.7324829101562,
+          "scalarized_return": 3075.402587890625,
           "std_vector_return": [
-            840.705322265625,
-            221.81829833984375
+            45.05644989013672,
+            18.061540603637695
           ],
-          "step": 855040
+          "step": 1032960
         },
         {
-          "completed_episodes": 6014,
+          "completed_episodes": 6003,
           "mean_vector_return": [
-            387.721923828125,
-            173.7913360595703
+            2993.019287109375,
+            715.1193237304688
           ],
           "phase": "periodic",
-          "scalarized_return": 387.721923828125,
+          "scalarized_return": 2993.019287109375,
           "std_vector_return": [
-            10.676197052001953,
-            12.491264343261719
+            68.91473388671875,
+            29.572587966918945
           ],
-          "step": 867072
+          "step": 1068800
         },
         {
-          "completed_episodes": 6105,
+          "completed_episodes": 6100,
           "mean_vector_return": [
-            30.534276962280273,
-            68.81462097167969
+            2308.2705078125,
+            488.60626220703125
           ],
           "phase": "periodic",
-          "scalarized_return": 30.534276962280273,
+          "scalarized_return": 2308.2705078125,
           "std_vector_return": [
-            2.929776906967163,
-            2.0569190979003906
+            793.7885131835938,
+            148.81396484375
           ],
-          "step": 876288
+          "step": 1103872
         },
         {
           "completed_episodes": 6200,
           "mean_vector_return": [
-            34.55405807495117,
-            75.10506439208984
+            2709.158935546875,
+            670.8925170898438
           ],
           "phase": "periodic",
-          "scalarized_return": 34.55405807495117,
+          "scalarized_return": 2709.158935546875,
           "std_vector_return": [
-            1.5429859161376953,
-            0.8284903168678284
+            760.9923095703125,
+            186.8798065185547
           ],
-          "step": 884224
+          "step": 1138176
         },
         {
-          "completed_episodes": 6300,
+          "completed_episodes": 6302,
           "mean_vector_return": [
-            2728.298583984375,
-            645.705810546875
+            2845.016357421875,
+            603.1023559570312
           ],
           "phase": "periodic",
-          "scalarized_return": 2728.298583984375,
+          "scalarized_return": 2845.016357421875,
           "std_vector_return": [
-            806.8011474609375,
-            163.47816467285156
+            281.8357238769531,
+            162.13148498535156
           ],
-          "step": 899328
+          "step": 1175552
         },
         {
-          "completed_episodes": 6402,
+          "completed_episodes": 6400,
           "mean_vector_return": [
-            930.4319458007812,
-            235.7853546142578
+            2521.197021484375,
+            626.704833984375
           ],
           "phase": "periodic",
-          "scalarized_return": 930.4319458007812,
+          "scalarized_return": 2521.197021484375,
           "std_vector_return": [
-            1080.0562744140625,
-            219.6112060546875
+            988.6583251953125,
+            223.1461944580078
           ],
-          "step": 935936
+          "step": 1214720
         },
         {
           "completed_episodes": 6501,
           "mean_vector_return": [
-            44.85738754272461,
-            52.42161178588867
+            2809.968994140625,
+            470.1227111816406
           ],
           "phase": "periodic",
-          "scalarized_return": 44.85738754272461,
+          "scalarized_return": 2809.968994140625,
           "std_vector_return": [
-            1.3954944610595703,
-            0.902960479259491
+            676.3680419921875,
+            86.55028533935547
           ],
-          "step": 960000
+          "step": 1258240
         },
         {
-          "completed_episodes": 6601,
+          "completed_episodes": 6600,
           "mean_vector_return": [
-            3055.360595703125,
-            750.7211303710938
+            3131.54345703125,
+            510.04156494140625
           ],
           "phase": "periodic",
-          "scalarized_return": 3055.360595703125,
+          "scalarized_return": 3131.54345703125,
           "std_vector_return": [
-            345.0558776855469,
-            66.57188415527344
+            50.20743942260742,
+            33.52507400512695
           ],
-          "step": 984064
+          "step": 1288960
         },
         {
           "completed_episodes": 6700,
           "mean_vector_return": [
-            2625.885009765625,
-            612.9448852539062
+            3384.216064453125,
+            657.0953979492188
           ],
           "phase": "periodic",
-          "scalarized_return": 2625.885009765625,
+          "scalarized_return": 3384.216064453125,
           "std_vector_return": [
-            956.6630249023438,
-            196.04661560058594
+            23.710962295532227,
+            13.506415367126465
           ],
-          "step": 1019392
+          "step": 1333504
         },
         {
-          "completed_episodes": 6803,
+          "completed_episodes": 6800,
           "mean_vector_return": [
-            3231.35302734375,
-            534.0744018554688
+            51.348731994628906,
+            24.03470230102539
           ],
           "phase": "periodic",
-          "scalarized_return": 3231.35302734375,
+          "scalarized_return": 51.348731994628906,
           "std_vector_return": [
-            91.58515167236328,
-            69.76702117919922
+            5.026453018188477,
+            3.6159164905548096
           ],
-          "step": 1052416
+          "step": 1364736
         },
         {
           "completed_episodes": 6900,
           "mean_vector_return": [
-            2389.41259765625,
-            598.2821655273438
+            18.659330368041992,
+            -0.48108550906181335
           ],
           "phase": "periodic",
-          "scalarized_return": 2389.41259765625,
+          "scalarized_return": 18.659330368041992,
           "std_vector_return": [
-            1234.5540771484375,
-            275.6739807128906
+            1.0164626836776733,
+            1.510581612586975
           ],
-          "step": 1086720
+          "step": 1400576
         },
         {
           "completed_episodes": 7000,
           "mean_vector_return": [
-            2227.800537109375,
-            404.8876953125
+            2163.383544921875,
+            298.6473693847656
           ],
           "phase": "periodic",
-          "scalarized_return": 2227.800537109375,
+          "scalarized_return": 2163.383544921875,
           "std_vector_return": [
-            1150.7586669921875,
-            197.157470703125
+            812.0115966796875,
+            107.9151840209961
           ],
-          "step": 1131264
+          "step": 1425152
         },
         {
-          "completed_episodes": 7102,
+          "completed_episodes": 7100,
           "mean_vector_return": [
-            2451.47509765625,
-            467.7101745605469
+            3192.88623046875,
+            484.47882080078125
           ],
           "phase": "periodic",
-          "scalarized_return": 2451.47509765625,
+          "scalarized_return": 3192.88623046875,
           "std_vector_return": [
-            953.6372680664062,
-            177.39723205566406
+            272.44488525390625,
+            67.19047546386719
           ],
-          "step": 1169664
+          "step": 1467392
         },
         {
-          "completed_episodes": 7202,
+          "completed_episodes": 7200,
           "mean_vector_return": [
-            2177.9306640625,
-            520.3369140625
+            680.7103881835938,
+            123.6337890625
           ],
           "phase": "periodic",
-          "scalarized_return": 2177.9306640625,
+          "scalarized_return": 680.7103881835938,
           "std_vector_return": [
-            1141.8443603515625,
-            260.1592712402344
+            1027.223388671875,
+            123.73844146728516
           ],
-          "step": 1207296
+          "step": 1508608
         },
         {
-          "completed_episodes": 7300,
+          "completed_episodes": 7301,
           "mean_vector_return": [
-            2863.58251953125,
-            682.3629760742188
+            2968.102783203125,
+            391.9521484375
           ],
           "phase": "periodic",
-          "scalarized_return": 2863.58251953125,
+          "scalarized_return": 2968.102783203125,
           "std_vector_return": [
-            719.6365356445312,
-            121.87124633789062
+            538.5043334960938,
+            97.01055908203125
           ],
-          "step": 1236224
+          "step": 1546240
         },
         {
-          "completed_episodes": 7401,
+          "completed_episodes": 7400,
           "mean_vector_return": [
-            2261.361572265625,
-            634.9334716796875
+            2672.545166015625,
+            364.6371154785156
           ],
           "phase": "periodic",
-          "scalarized_return": 2261.361572265625,
+          "scalarized_return": 2672.545166015625,
           "std_vector_return": [
-            1013.5836181640625,
-            235.790283203125
+            419.8721923828125,
+            104.5906753540039
           ],
-          "step": 1263104
+          "step": 1581312
         },
         {
-          "completed_episodes": 7500,
+          "completed_episodes": 7501,
           "mean_vector_return": [
-            1692.7938232421875,
-            460.8548889160156
+            3163.678466796875,
+            488.9743347167969
           ],
           "phase": "periodic",
-          "scalarized_return": 1692.7938232421875,
+          "scalarized_return": 3163.678466796875,
           "std_vector_return": [
-            887.0737915039062,
-            184.13046264648438
+            430.8123779296875,
+            78.55348205566406
           ],
-          "step": 1286144
+          "step": 1612800
         },
         {
           "completed_episodes": 7600,
           "mean_vector_return": [
-            2091.383056640625,
-            508.862548828125
+            3362.851318359375,
+            523.6674194335938
           ],
           "phase": "periodic",
-          "scalarized_return": 2091.383056640625,
+          "scalarized_return": 3362.851318359375,
           "std_vector_return": [
-            1489.1773681640625,
-            310.2088928222656
+            172.9960174560547,
+            78.87467956542969
           ],
-          "step": 1310464
+          "step": 1649920
         },
         {
           "completed_episodes": 7700,
           "mean_vector_return": [
-            45.139190673828125,
-            56.11320114135742
+            3474.103271484375,
+            514.0479736328125
           ],
           "phase": "periodic",
-          "scalarized_return": 45.139190673828125,
+          "scalarized_return": 3474.103271484375,
           "std_vector_return": [
-            2.551835536956787,
-            2.1960484981536865
+            53.94464874267578,
+            17.022756576538086
           ],
-          "step": 1342464
+          "step": 1698304
         },
         {
-          "completed_episodes": 7802,
+          "completed_episodes": 7801,
           "mean_vector_return": [
-            1907.1229248046875,
-            472.186279296875
+            3279.675048828125,
+            530.25146484375
           ],
           "phase": "periodic",
-          "scalarized_return": 1907.1229248046875,
+          "scalarized_return": 3279.675048828125,
           "std_vector_return": [
-            1259.865234375,
-            281.58404541015625
+            269.74530029296875,
+            26.376815795898438
           ],
-          "step": 1371648
+          "step": 1740032
         },
         {
-          "completed_episodes": 7900,
+          "completed_episodes": 7901,
           "mean_vector_return": [
-            2701.085693359375,
-            632.2714233398438
+            3240.790771484375,
+            479.0462951660156
           ],
           "phase": "periodic",
-          "scalarized_return": 2701.085693359375,
+          "scalarized_return": 3240.790771484375,
           "std_vector_return": [
-            1175.7525634765625,
-            273.9802551269531
+            415.2582702636719,
+            64.27660369873047
           ],
-          "step": 1393920
+          "step": 1771776
         },
         {
           "completed_episodes": 8001,
           "mean_vector_return": [
-            3336.763671875,
-            794.997802734375
+            2499.408935546875,
+            381.86199951171875
           ],
           "phase": "periodic",
-          "scalarized_return": 3336.763671875,
+          "scalarized_return": 2499.408935546875,
           "std_vector_return": [
-            22.251955032348633,
-            12.320133209228516
+            1615.9510498046875,
+            239.81143188476562
           ],
-          "step": 1431296
+          "step": 1822464
         },
         {
-          "completed_episodes": 8100,
+          "completed_episodes": 8101,
           "mean_vector_return": [
-            40.0611686706543,
-            51.372352600097656
+            2043.6695556640625,
+            298.194091796875
           ],
           "phase": "periodic",
-          "scalarized_return": 40.0611686706543,
+          "scalarized_return": 2043.6695556640625,
           "std_vector_return": [
-            3.5164875984191895,
-            0.8971490263938904
+            1696.6436767578125,
+            231.5226287841797
           ],
-          "step": 1456128
+          "step": 1856768
         },
         {
-          "completed_episodes": 8202,
+          "completed_episodes": 8200,
           "mean_vector_return": [
-            39.263450622558594,
-            48.429203033447266
+            3629.1171875,
+            467.25341796875
           ],
           "phase": "periodic",
-          "scalarized_return": 39.263450622558594,
+          "scalarized_return": 3629.1171875,
           "std_vector_return": [
-            2.070401430130005,
-            1.2113827466964722
+            67.6728286743164,
+            16.592649459838867
           ],
-          "step": 1462784
+          "step": 1899520
         },
         {
           "completed_episodes": 8300,
           "mean_vector_return": [
-            2828.60986328125,
-            659.6893920898438
+            2958.578857421875,
+            474.67315673828125
           ],
           "phase": "periodic",
-          "scalarized_return": 2828.60986328125,
+          "scalarized_return": 2958.578857421875,
           "std_vector_return": [
-            1117.8125,
-            244.78811645507812
+            615.76220703125,
+            81.66045379638672
           ],
-          "step": 1473280
+          "step": 1941760
         },
         {
-          "completed_episodes": 8402,
+          "completed_episodes": 8401,
           "mean_vector_return": [
-            118.6448745727539,
-            83.29396057128906
+            3390.673828125,
+            552.9530029296875
           ],
           "phase": "periodic",
-          "scalarized_return": 118.6448745727539,
+          "scalarized_return": 3390.673828125,
           "std_vector_return": [
-            87.75159454345703,
-            24.54974937438965
+            240.01719665527344,
+            50.9494743347168
           ],
-          "step": 1492480
+          "step": 1985792
         },
         {
-          "completed_episodes": 8507,
+          "completed_episodes": 8427,
           "mean_vector_return": [
-            162.39012145996094,
-            13.754231452941895
-          ],
-          "phase": "periodic",
-          "scalarized_return": 162.39012145996094,
-          "std_vector_return": [
-            12.87802791595459,
-            7.419956207275391
-          ],
-          "step": 1497344
-        },
-        {
-          "completed_episodes": 8608,
-          "mean_vector_return": [
-            2.088744640350342,
-            8.178168296813965
-          ],
-          "phase": "periodic",
-          "scalarized_return": 2.088744640350342,
-          "std_vector_return": [
-            2.2639567852020264,
-            5.726456642150879
-          ],
-          "step": 1501952
-        },
-        {
-          "completed_episodes": 8708,
-          "mean_vector_return": [
-            -1.2884691953659058,
-            7.3275041580200195
-          ],
-          "phase": "periodic",
-          "scalarized_return": -1.2884691953659058,
-          "std_vector_return": [
-            2.7026121616363525,
-            4.564959526062012
-          ],
-          "step": 1504768
-        },
-        {
-          "completed_episodes": 8802,
-          "mean_vector_return": [
-            329.1203308105469,
-            70.14073944091797
-          ],
-          "phase": "periodic",
-          "scalarized_return": 329.1203308105469,
-          "std_vector_return": [
-            110.1170883178711,
-            28.27020263671875
-          ],
-          "step": 1511168
-        },
-        {
-          "completed_episodes": 8903,
-          "mean_vector_return": [
-            62.26204299926758,
-            25.36741828918457
-          ],
-          "phase": "periodic",
-          "scalarized_return": 62.26204299926758,
-          "std_vector_return": [
-            10.116544723510742,
-            8.712302207946777
-          ],
-          "step": 1518336
-        },
-        {
-          "completed_episodes": 9002,
-          "mean_vector_return": [
-            40.70937728881836,
-            68.66204071044922
-          ],
-          "phase": "periodic",
-          "scalarized_return": 40.70937728881836,
-          "std_vector_return": [
-            7.209829330444336,
-            12.635403633117676
-          ],
-          "step": 1525760
-        },
-        {
-          "completed_episodes": 9110,
-          "mean_vector_return": [
-            35.34144973754883,
-            67.61424255371094
-          ],
-          "phase": "periodic",
-          "scalarized_return": 35.34144973754883,
-          "std_vector_return": [
-            0.8902173638343811,
-            4.091235160827637
-          ],
-          "step": 1529856
-        },
-        {
-          "completed_episodes": 9201,
-          "mean_vector_return": [
-            38.57141876220703,
-            45.78396987915039
-          ],
-          "phase": "periodic",
-          "scalarized_return": 38.57141876220703,
-          "std_vector_return": [
-            4.134226322174072,
-            3.5594897270202637
-          ],
-          "step": 1533696
-        },
-        {
-          "completed_episodes": 9301,
-          "mean_vector_return": [
-            164.4192352294922,
-            116.32562255859375
-          ],
-          "phase": "periodic",
-          "scalarized_return": 164.4192352294922,
-          "std_vector_return": [
-            12.852742195129395,
-            3.076033353805542
-          ],
-          "step": 1537280
-        },
-        {
-          "completed_episodes": 9403,
-          "mean_vector_return": [
-            364.9454040527344,
-            115.23638916015625
-          ],
-          "phase": "periodic",
-          "scalarized_return": 364.9454040527344,
-          "std_vector_return": [
-            18.239397048950195,
-            25.132266998291016
-          ],
-          "step": 1548032
-        },
-        {
-          "completed_episodes": 9507,
-          "mean_vector_return": [
-            316.11236572265625,
-            136.36770629882812
-          ],
-          "phase": "periodic",
-          "scalarized_return": 316.11236572265625,
-          "std_vector_return": [
-            51.3468132019043,
-            29.259387969970703
-          ],
-          "step": 1556480
-        },
-        {
-          "completed_episodes": 9600,
-          "mean_vector_return": [
-            19.957080841064453,
-            5.027689456939697
-          ],
-          "phase": "periodic",
-          "scalarized_return": 19.957080841064453,
-          "std_vector_return": [
-            2.41312575340271,
-            1.0110969543457031
-          ],
-          "step": 1566464
-        },
-        {
-          "completed_episodes": 9701,
-          "mean_vector_return": [
-            62.65009307861328,
-            48.43989181518555
-          ],
-          "phase": "periodic",
-          "scalarized_return": 62.65009307861328,
-          "std_vector_return": [
-            7.15335750579834,
-            2.1835546493530273
-          ],
-          "step": 1573888
-        },
-        {
-          "completed_episodes": 9802,
-          "mean_vector_return": [
-            97.66522216796875,
-            55.478981018066406
-          ],
-          "phase": "periodic",
-          "scalarized_return": 97.66522216796875,
-          "std_vector_return": [
-            2.2932357788085938,
-            2.5491604804992676
-          ],
-          "step": 1583104
-        },
-        {
-          "completed_episodes": 9904,
-          "mean_vector_return": [
-            261.857177734375,
-            45.355281829833984
-          ],
-          "phase": "periodic",
-          "scalarized_return": 261.857177734375,
-          "std_vector_return": [
-            154.08934020996094,
-            40.79179000854492
-          ],
-          "step": 1595136
-        },
-        {
-          "completed_episodes": 10002,
-          "mean_vector_return": [
-            -2.7863454818725586,
-            -10.605807304382324
-          ],
-          "phase": "periodic",
-          "scalarized_return": -2.7863454818725586,
-          "std_vector_return": [
-            0.40108588337898254,
-            0.7344685196876526
-          ],
-          "step": 1606912
-        },
-        {
-          "completed_episodes": 10111,
-          "mean_vector_return": [
-            11.474154472351074,
-            -2.5399129390716553
-          ],
-          "phase": "periodic",
-          "scalarized_return": 11.474154472351074,
-          "std_vector_return": [
-            0.284883975982666,
-            1.7130372524261475
-          ],
-          "step": 1611008
-        },
-        {
-          "completed_episodes": 10203,
-          "mean_vector_return": [
-            30.24078369140625,
-            -10.539568901062012
-          ],
-          "phase": "periodic",
-          "scalarized_return": 30.24078369140625,
-          "std_vector_return": [
-            0.7436236143112183,
-            5.290278434753418
-          ],
-          "step": 1616896
-        },
-        {
-          "completed_episodes": 10303,
-          "mean_vector_return": [
-            28.027158737182617,
-            1.4013561010360718
-          ],
-          "phase": "periodic",
-          "scalarized_return": 28.027158737182617,
-          "std_vector_return": [
-            1.6945629119873047,
-            2.014479637145996
-          ],
-          "step": 1620992
-        },
-        {
-          "completed_episodes": 10400,
-          "mean_vector_return": [
-            262.8175964355469,
-            10.017586708068848
-          ],
-          "phase": "periodic",
-          "scalarized_return": 262.8175964355469,
-          "std_vector_return": [
-            29.68840980529785,
-            5.274949073791504
-          ],
-          "step": 1630464
-        },
-        {
-          "completed_episodes": 10506,
-          "mean_vector_return": [
-            47.42961120605469,
-            20.221954345703125
-          ],
-          "phase": "periodic",
-          "scalarized_return": 47.42961120605469,
-          "std_vector_return": [
-            3.098012685775757,
-            2.121577739715576
-          ],
-          "step": 1637376
-        },
-        {
-          "completed_episodes": 10600,
-          "mean_vector_return": [
-            189.6314697265625,
-            13.42790412902832
-          ],
-          "phase": "periodic",
-          "scalarized_return": 189.6314697265625,
-          "std_vector_return": [
-            142.48617553710938,
-            28.45260238647461
-          ],
-          "step": 1641728
-        },
-        {
-          "completed_episodes": 10714,
-          "mean_vector_return": [
-            126.91487884521484,
-            18.083560943603516
-          ],
-          "phase": "periodic",
-          "scalarized_return": 126.91487884521484,
-          "std_vector_return": [
-            41.44103240966797,
-            18.600358963012695
-          ],
-          "step": 1648128
-        },
-        {
-          "completed_episodes": 10801,
-          "mean_vector_return": [
-            444.787353515625,
-            21.26302146911621
-          ],
-          "phase": "periodic",
-          "scalarized_return": 444.787353515625,
-          "std_vector_return": [
-            272.39794921875,
-            11.358514785766602
-          ],
-          "step": 1659392
-        },
-        {
-          "completed_episodes": 10900,
-          "mean_vector_return": [
-            105.0701904296875,
-            7.999963283538818
-          ],
-          "phase": "periodic",
-          "scalarized_return": 105.0701904296875,
-          "std_vector_return": [
-            149.72584533691406,
-            35.30803680419922
-          ],
-          "step": 1666560
-        },
-        {
-          "completed_episodes": 11003,
-          "mean_vector_return": [
-            27.863880157470703,
-            14.990257263183594
-          ],
-          "phase": "periodic",
-          "scalarized_return": 27.863880157470703,
-          "std_vector_return": [
-            2.9564766883850098,
-            2.1986043453216553
-          ],
-          "step": 1674240
-        },
-        {
-          "completed_episodes": 11103,
-          "mean_vector_return": [
-            17.35725975036621,
-            27.191207885742188
-          ],
-          "phase": "periodic",
-          "scalarized_return": 17.35725975036621,
-          "std_vector_return": [
-            1.121416449546814,
-            3.3737633228302
-          ],
-          "step": 1677568
-        },
-        {
-          "completed_episodes": 11204,
-          "mean_vector_return": [
-            17.156023025512695,
-            18.122465133666992
-          ],
-          "phase": "periodic",
-          "scalarized_return": 17.156023025512695,
-          "std_vector_return": [
-            4.409478187561035,
-            3.949716091156006
-          ],
-          "step": 1681664
-        },
-        {
-          "completed_episodes": 11304,
-          "mean_vector_return": [
-            104.81593322753906,
-            16.940143585205078
-          ],
-          "phase": "periodic",
-          "scalarized_return": 104.81593322753906,
-          "std_vector_return": [
-            164.16046142578125,
-            26.285837173461914
-          ],
-          "step": 1692672
-        },
-        {
-          "completed_episodes": 11405,
-          "mean_vector_return": [
-            26.64401626586914,
-            20.18457794189453
-          ],
-          "phase": "periodic",
-          "scalarized_return": 26.64401626586914,
-          "std_vector_return": [
-            9.124639511108398,
-            5.571808338165283
-          ],
-          "step": 1698816
-        },
-        {
-          "completed_episodes": 11504,
-          "mean_vector_return": [
-            109.67633056640625,
-            35.152862548828125
-          ],
-          "phase": "periodic",
-          "scalarized_return": 109.67633056640625,
-          "std_vector_return": [
-            34.26057434082031,
-            12.914347648620605
-          ],
-          "step": 1703168
-        },
-        {
-          "completed_episodes": 11600,
-          "mean_vector_return": [
-            39.06214141845703,
-            28.828039169311523
-          ],
-          "phase": "periodic",
-          "scalarized_return": 39.06214141845703,
-          "std_vector_return": [
-            12.937037467956543,
-            6.458071708679199
-          ],
-          "step": 1717504
-        },
-        {
-          "completed_episodes": 11704,
-          "mean_vector_return": [
-            97.07479095458984,
-            -25.99981117248535
-          ],
-          "phase": "periodic",
-          "scalarized_return": 97.07479095458984,
-          "std_vector_return": [
-            1.1477051973342896,
-            0.8978123068809509
-          ],
-          "step": 1729536
-        },
-        {
-          "completed_episodes": 11823,
-          "mean_vector_return": [
-            33.79682922363281,
-            -27.21466064453125
-          ],
-          "phase": "periodic",
-          "scalarized_return": 33.79682922363281,
-          "std_vector_return": [
-            20.48089027404785,
-            11.773014068603516
-          ],
-          "step": 1734144
-        },
-        {
-          "completed_episodes": 11903,
-          "mean_vector_return": [
-            34.8585319519043,
-            -13.06885814666748
-          ],
-          "phase": "periodic",
-          "scalarized_return": 34.8585319519043,
-          "std_vector_return": [
-            1.9727493524551392,
-            1.6272063255310059
-          ],
-          "step": 1736448
-        },
-        {
-          "completed_episodes": 12001,
-          "mean_vector_return": [
-            10.920930862426758,
-            -9.827354431152344
-          ],
-          "phase": "periodic",
-          "scalarized_return": 10.920930862426758,
-          "std_vector_return": [
-            30.601232528686523,
-            12.223069190979004
-          ],
-          "step": 1740544
-        },
-        {
-          "completed_episodes": 12108,
-          "mean_vector_return": [
-            41.535316467285156,
-            14.209994316101074
-          ],
-          "phase": "periodic",
-          "scalarized_return": 41.535316467285156,
-          "std_vector_return": [
-            1.609489917755127,
-            2.622988700866699
-          ],
-          "step": 1743616
-        },
-        {
-          "completed_episodes": 12203,
-          "mean_vector_return": [
-            33.716548919677734,
-            16.049108505249023
-          ],
-          "phase": "periodic",
-          "scalarized_return": 33.716548919677734,
-          "std_vector_return": [
-            1.3652254343032837,
-            2.8384361267089844
-          ],
-          "step": 1746688
-        },
-        {
-          "completed_episodes": 12304,
-          "mean_vector_return": [
-            19.845844268798828,
-            17.43949317932129
-          ],
-          "phase": "periodic",
-          "scalarized_return": 19.845844268798828,
-          "std_vector_return": [
-            0.904173731803894,
-            1.9097003936767578
-          ],
-          "step": 1750528
-        },
-        {
-          "completed_episodes": 12402,
-          "mean_vector_return": [
-            5.936484336853027,
-            7.052515506744385
-          ],
-          "phase": "periodic",
-          "scalarized_return": 5.936484336853027,
-          "std_vector_return": [
-            1.212343454360962,
-            0.8757281303405762
-          ],
-          "step": 1753088
-        },
-        {
-          "completed_episodes": 12506,
-          "mean_vector_return": [
-            -0.10006155073642731,
-            1.4691710472106934
-          ],
-          "phase": "periodic",
-          "scalarized_return": -0.10006155073642731,
-          "std_vector_return": [
-            0.862382709980011,
-            0.6529788970947266
-          ],
-          "step": 1755136
-        },
-        {
-          "completed_episodes": 12600,
-          "mean_vector_return": [
-            4.83085298538208,
-            0.9989625811576843
-          ],
-          "phase": "periodic",
-          "scalarized_return": 4.83085298538208,
-          "std_vector_return": [
-            2.2303876876831055,
-            1.7012443542480469
-          ],
-          "step": 1757184
-        },
-        {
-          "completed_episodes": 12707,
-          "mean_vector_return": [
-            12.044957160949707,
-            0.43375834822654724
-          ],
-          "phase": "periodic",
-          "scalarized_return": 12.044957160949707,
-          "std_vector_return": [
-            1.1233189105987549,
-            2.0012691020965576
-          ],
-          "step": 1760000
-        },
-        {
-          "completed_episodes": 12802,
-          "mean_vector_return": [
-            48.46889114379883,
-            -3.189905881881714
-          ],
-          "phase": "periodic",
-          "scalarized_return": 48.46889114379883,
-          "std_vector_return": [
-            51.06577682495117,
-            7.619016647338867
-          ],
-          "step": 1762816
-        },
-        {
-          "completed_episodes": 12902,
-          "mean_vector_return": [
-            63.673519134521484,
-            22.2370662689209
-          ],
-          "phase": "periodic",
-          "scalarized_return": 63.673519134521484,
-          "std_vector_return": [
-            8.663363456726074,
-            5.83245849609375
-          ],
-          "step": 1767168
-        },
-        {
-          "completed_episodes": 13000,
-          "mean_vector_return": [
-            68.10330963134766,
-            19.331348419189453
-          ],
-          "phase": "periodic",
-          "scalarized_return": 68.10330963134766,
-          "std_vector_return": [
-            61.99323654174805,
-            18.979982376098633
-          ],
-          "step": 1772800
-        },
-        {
-          "completed_episodes": 13106,
-          "mean_vector_return": [
-            10.865856170654297,
-            -2.1658504009246826
-          ],
-          "phase": "periodic",
-          "scalarized_return": 10.865856170654297,
-          "std_vector_return": [
-            4.945920944213867,
-            4.529303073883057
-          ],
-          "step": 1778176
-        },
-        {
-          "completed_episodes": 13205,
-          "mean_vector_return": [
-            3.591033697128296,
-            1.836077094078064
-          ],
-          "phase": "periodic",
-          "scalarized_return": 3.591033697128296,
-          "std_vector_return": [
-            1.2466156482696533,
-            2.750417470932007
-          ],
-          "step": 1780736
-        },
-        {
-          "completed_episodes": 13305,
-          "mean_vector_return": [
-            208.03054809570312,
-            48.707977294921875
-          ],
-          "phase": "periodic",
-          "scalarized_return": 208.03054809570312,
-          "std_vector_return": [
-            14.27880859375,
-            12.649788856506348
-          ],
-          "step": 1784576
-        },
-        {
-          "completed_episodes": 13402,
-          "mean_vector_return": [
-            15.996627807617188,
-            17.773130416870117
-          ],
-          "phase": "periodic",
-          "scalarized_return": 15.996627807617188,
-          "std_vector_return": [
-            0.6423324942588806,
-            1.404768705368042
-          ],
-          "step": 1807616
-        },
-        {
-          "completed_episodes": 13501,
-          "mean_vector_return": [
-            13.558570861816406,
-            12.72134780883789
-          ],
-          "phase": "periodic",
-          "scalarized_return": 13.558570861816406,
-          "std_vector_return": [
-            0.652510404586792,
-            1.4597630500793457
-          ],
-          "step": 1812480
-        },
-        {
-          "completed_episodes": 13604,
-          "mean_vector_return": [
-            8.131980895996094,
-            16.67471694946289
-          ],
-          "phase": "periodic",
-          "scalarized_return": 8.131980895996094,
-          "std_vector_return": [
-            2.128948211669922,
-            10.405596733093262
-          ],
-          "step": 1815808
-        },
-        {
-          "completed_episodes": 13703,
-          "mean_vector_return": [
-            15.814590454101562,
-            25.098121643066406
-          ],
-          "phase": "periodic",
-          "scalarized_return": 15.814590454101562,
-          "std_vector_return": [
-            0.5891233682632446,
-            2.2316622734069824
-          ],
-          "step": 1818880
-        },
-        {
-          "completed_episodes": 13803,
-          "mean_vector_return": [
-            225.0128631591797,
-            22.50418472290039
-          ],
-          "phase": "periodic",
-          "scalarized_return": 225.0128631591797,
-          "std_vector_return": [
-            102.33305358886719,
-            7.1503753662109375
-          ],
-          "step": 1822720
-        },
-        {
-          "completed_episodes": 13900,
-          "mean_vector_return": [
-            373.16412353515625,
-            112.5777587890625
-          ],
-          "phase": "periodic",
-          "scalarized_return": 373.16412353515625,
-          "std_vector_return": [
-            210.52719116210938,
-            14.932903289794922
-          ],
-          "step": 1835776
-        },
-        {
-          "completed_episodes": 14005,
-          "mean_vector_return": [
-            31.82431411743164,
-            9.573878288269043
-          ],
-          "phase": "periodic",
-          "scalarized_return": 31.82431411743164,
-          "std_vector_return": [
-            2.9520986080169678,
-            2.736388921737671
-          ],
-          "step": 1842688
-        },
-        {
-          "completed_episodes": 14106,
-          "mean_vector_return": [
-            29.991479873657227,
-            20.45897674560547
-          ],
-          "phase": "periodic",
-          "scalarized_return": 29.991479873657227,
-          "std_vector_return": [
-            1.3940794467926025,
-            4.6766815185546875
-          ],
-          "step": 1847296
-        },
-        {
-          "completed_episodes": 14202,
-          "mean_vector_return": [
-            22.43446922302246,
-            30.298688888549805
-          ],
-          "phase": "periodic",
-          "scalarized_return": 22.43446922302246,
-          "std_vector_return": [
-            3.175483226776123,
-            5.472729682922363
-          ],
-          "step": 1853440
-        },
-        {
-          "completed_episodes": 14301,
-          "mean_vector_return": [
-            46.253807067871094,
-            84.36666107177734
-          ],
-          "phase": "periodic",
-          "scalarized_return": 46.253807067871094,
-          "std_vector_return": [
-            4.957871913909912,
-            7.431148052215576
-          ],
-          "step": 1860864
-        },
-        {
-          "completed_episodes": 14403,
-          "mean_vector_return": [
-            27.663238525390625,
-            56.33942794799805
-          ],
-          "phase": "periodic",
-          "scalarized_return": 27.663238525390625,
-          "std_vector_return": [
-            0.8449267745018005,
-            4.1005940437316895
-          ],
-          "step": 1869824
-        },
-        {
-          "completed_episodes": 14504,
-          "mean_vector_return": [
-            40.6748046875,
-            66.050537109375
-          ],
-          "phase": "periodic",
-          "scalarized_return": 40.6748046875,
-          "std_vector_return": [
-            1.7253836393356323,
-            2.689662218093872
-          ],
-          "step": 1874432
-        },
-        {
-          "completed_episodes": 14600,
-          "mean_vector_return": [
-            5.8941192626953125,
-            15.11790657043457
-          ],
-          "phase": "periodic",
-          "scalarized_return": 5.8941192626953125,
-          "std_vector_return": [
-            0.4864293336868286,
-            1.262647032737732
-          ],
-          "step": 1878272
-        },
-        {
-          "completed_episodes": 14737,
-          "mean_vector_return": [
-            11.468547821044922,
-            7.751060485839844
-          ],
-          "phase": "periodic",
-          "scalarized_return": 11.468547821044922,
-          "std_vector_return": [
-            1.0211560726165771,
-            0.6736080646514893
-          ],
-          "step": 1881600
-        },
-        {
-          "completed_episodes": 14802,
-          "mean_vector_return": [
-            22.744077682495117,
-            25.555654525756836
-          ],
-          "phase": "periodic",
-          "scalarized_return": 22.744077682495117,
-          "std_vector_return": [
-            0.23835226893424988,
-            0.763945460319519
-          ],
-          "step": 1883392
-        },
-        {
-          "completed_episodes": 14909,
-          "mean_vector_return": [
-            28.151458740234375,
-            10.4480619430542
-          ],
-          "phase": "periodic",
-          "scalarized_return": 28.151458740234375,
-          "std_vector_return": [
-            3.6893460750579834,
-            2.5135598182678223
-          ],
-          "step": 1886976
-        },
-        {
-          "completed_episodes": 15000,
-          "mean_vector_return": [
-            31.566177368164062,
-            9.304343223571777
-          ],
-          "phase": "periodic",
-          "scalarized_return": 31.566177368164062,
-          "std_vector_return": [
-            2.1860785484313965,
-            3.1353909969329834
-          ],
-          "step": 1890048
-        },
-        {
-          "completed_episodes": 15102,
-          "mean_vector_return": [
-            621.8065185546875,
-            39.61137008666992
-          ],
-          "phase": "periodic",
-          "scalarized_return": 621.8065185546875,
-          "std_vector_return": [
-            272.9496765136719,
-            37.56541061401367
-          ],
-          "step": 1893376
-        },
-        {
-          "completed_episodes": 15201,
-          "mean_vector_return": [
-            28.952253341674805,
-            17.798160552978516
-          ],
-          "phase": "periodic",
-          "scalarized_return": 28.952253341674805,
-          "std_vector_return": [
-            3.1053285598754883,
-            2.256103038787842
-          ],
-          "step": 1898240
-        },
-        {
-          "completed_episodes": 15304,
-          "mean_vector_return": [
-            58.67542266845703,
-            41.3746337890625
-          ],
-          "phase": "periodic",
-          "scalarized_return": 58.67542266845703,
-          "std_vector_return": [
-            7.202308654785156,
-            1.8015015125274658
-          ],
-          "step": 1904640
-        },
-        {
-          "completed_episodes": 15405,
-          "mean_vector_return": [
-            32.58065414428711,
-            35.830596923828125
-          ],
-          "phase": "periodic",
-          "scalarized_return": 32.58065414428711,
-          "std_vector_return": [
-            1.5223541259765625,
-            4.070522785186768
-          ],
-          "step": 1909760
-        },
-        {
-          "completed_episodes": 15506,
-          "mean_vector_return": [
-            45.26493453979492,
-            23.444002151489258
-          ],
-          "phase": "periodic",
-          "scalarized_return": 45.26493453979492,
-          "std_vector_return": [
-            1.4672771692276,
-            1.5338844060897827
-          ],
-          "step": 1914368
-        },
-        {
-          "completed_episodes": 15604,
-          "mean_vector_return": [
-            141.95127868652344,
-            26.98244285583496
-          ],
-          "phase": "periodic",
-          "scalarized_return": 141.95127868652344,
-          "std_vector_return": [
-            297.7617492675781,
-            30.507125854492188
-          ],
-          "step": 1918976
-        },
-        {
-          "completed_episodes": 15706,
-          "mean_vector_return": [
-            2186.45556640625,
-            360.91033935546875
-          ],
-          "phase": "periodic",
-          "scalarized_return": 2186.45556640625,
-          "std_vector_return": [
-            302.0193786621094,
-            55.220733642578125
-          ],
-          "step": 1924864
-        },
-        {
-          "completed_episodes": 15801,
-          "mean_vector_return": [
-            32.15040588378906,
-            23.823423385620117
-          ],
-          "phase": "periodic",
-          "scalarized_return": 32.15040588378906,
-          "std_vector_return": [
-            1.5469059944152832,
-            2.429072618484497
-          ],
-          "step": 1933312
-        },
-        {
-          "completed_episodes": 15904,
-          "mean_vector_return": [
-            40.73626708984375,
-            36.27785873413086
-          ],
-          "phase": "periodic",
-          "scalarized_return": 40.73626708984375,
-          "std_vector_return": [
-            12.200300216674805,
-            1.5486993789672852
-          ],
-          "step": 1939968
-        },
-        {
-          "completed_episodes": 16002,
-          "mean_vector_return": [
-            273.1689147949219,
-            82.4166259765625
-          ],
-          "phase": "periodic",
-          "scalarized_return": 273.1689147949219,
-          "std_vector_return": [
-            710.7311401367188,
-            127.47660064697266
-          ],
-          "step": 1945088
-        },
-        {
-          "completed_episodes": 16100,
-          "mean_vector_return": [
-            37.62261962890625,
-            29.042850494384766
-          ],
-          "phase": "periodic",
-          "scalarized_return": 37.62261962890625,
-          "std_vector_return": [
-            3.8056321144104004,
-            7.679993629455566
-          ],
-          "step": 1964800
-        },
-        {
-          "completed_episodes": 16200,
-          "mean_vector_return": [
-            64.05571746826172,
-            23.69266700744629
-          ],
-          "phase": "periodic",
-          "scalarized_return": 64.05571746826172,
-          "std_vector_return": [
-            87.91419219970703,
-            22.04938316345215
-          ],
-          "step": 1972736
-        },
-        {
-          "completed_episodes": 16301,
-          "mean_vector_return": [
-            572.7039794921875,
-            132.15428161621094
-          ],
-          "phase": "periodic",
-          "scalarized_return": 572.7039794921875,
-          "std_vector_return": [
-            874.3296508789062,
-            133.19602966308594
-          ],
-          "step": 1977856
-        },
-        {
-          "completed_episodes": 16405,
-          "mean_vector_return": [
-            34.391380310058594,
-            33.6211051940918
-          ],
-          "phase": "periodic",
-          "scalarized_return": 34.391380310058594,
-          "std_vector_return": [
-            2.52689528465271,
-            3.8345179557800293
-          ],
-          "step": 1982208
-        },
-        {
-          "completed_episodes": 16503,
-          "mean_vector_return": [
-            2327.8779296875,
-            308.864013671875
-          ],
-          "phase": "periodic",
-          "scalarized_return": 2327.8779296875,
-          "std_vector_return": [
-            686.0275268554688,
-            65.85498046875
-          ],
-          "step": 1986560
-        },
-        {
-          "completed_episodes": 16551,
-          "mean_vector_return": [
-            122.9897232055664,
-            31.363981246948242
+            3609.343505859375,
+            557.012451171875
           ],
           "phase": "training_final",
-          "scalarized_return": 122.9897232055664,
+          "scalarized_return": 3609.343505859375,
           "std_vector_return": [
-            22.50632095336914,
-            7.354960918426514
+            105.7247314453125,
+            24.532154083251953
           ],
           "step": 2000128
         }
