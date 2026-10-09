@@ -543,6 +543,7 @@ class MOTD3Workflow(TD3Workflow):
             "interp_objs_walker2d_brax.txt",
             "interp_objs_walker2d_brax_legacy.txt",
             "interp_objs_walker2d_brax_v2.txt",
+            "interp_objs_walker2d_brax_v3.txt",
         }
         if config.env.env_type == "brax" and artifact_path.name not in brax_artifacts:
             raise ValueError(

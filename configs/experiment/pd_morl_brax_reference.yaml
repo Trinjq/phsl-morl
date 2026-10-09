@@ -66,7 +66,7 @@ optimizer:
   lr: 0.0003
   grad_clip_norm: 100
 
-interp_artifact_path: configs/artifacts/interp_objs_walker2d_brax_v2.txt
+interp_artifact_path: configs/artifacts/interp_objs_walker2d_brax_v3.txt
 save_replay_buffer: false
 checkpoint:
   enable: true
