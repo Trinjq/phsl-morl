@@ -39,6 +39,10 @@ def validate(artifact_path: Path, metadata_path: Path) -> dict:
     assert metadata["hyperparameters"]["batch_size"] == 100
     assert metadata["hyperparameters"]["replay_capacity"] == 500_000
     assert metadata["hyperparameters"]["policy_freq"] == 2
+    assert (
+        metadata["hyperparameters"].get("critic_loss_aggregation")
+        == "sum_of_per_critic_mean_smooth_l1"
+    ), "artifact was not trained with the production twin-critic loss"
     assert metadata["hyperparameters"]["evaluation_episodes"] == 10
 
     for row, per_key in zip(artifact, metadata["per_key"]):
@@ -47,6 +51,9 @@ def validate(artifact_path: Path, metadata_path: Path) -> dict:
         assert per_key["counts"]["random_action_steps"] == 25_088
         assert per_key["counts"]["critic_optimizer_step_count"] == EXPECTED_CRITIC_STEPS
         assert per_key["counts"]["actor_optimizer_step_count"] == EXPECTED_ACTOR_STEPS
+        assert np.isfinite(per_key["counts"]["last_critic_loss"])
+        assert np.isfinite(per_key["counts"]["last_actor_loss"])
+        assert per_key["counts"]["last_actor_loss"] != 0.0
         assert per_key["expected_counts"]["critic_optimizer_steps"] == EXPECTED_CRITIC_STEPS
         assert per_key["expected_counts"]["actor_optimizer_steps"] == EXPECTED_ACTOR_STEPS
         assert per_key["evaluation_history"][-1]["phase"] == "training_final"
