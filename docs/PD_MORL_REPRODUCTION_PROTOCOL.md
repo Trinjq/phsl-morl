@@ -1,330 +1,137 @@
-# PD-MORL Step9.0 Reproduction Protocol
+# PD-MORL GPU 并行基线：当前协议与运行入口
 
-Status: **STEP9.0 PD-MORL REPRODUCTION PROTOCOL PASS**
+更新日期：2026-10-10。本文件是当前基线的统一入口；旧报告保留实验出处，不再充当当前运行指令。
 
-This is an accounting and protocol audit only. No 1M-step run or six-seed
-experiment was started. The next permitted experiment is one source-equivalent
-Walker seed, after an explicit user request.
+## 研究路线与实现范围
 
-Step9.1 corrects the earlier Step9.0 draft, which added the 1,530-transition
-prefill on top of the official budget. The official `N=1,000,000` already
-includes those first 153 steps in every worker.
+当前工作是通过 EvoRL/JAX 与 Brax 建立 PD-MORL 的 GPU 并行基线。下一步在同一框架上复现 PSL-MORL，之后再实现基于 PSL-MORL 的新方法。目录、分支和旧报告中的 PHSL 名称是历史命名，不能据此判断已经实现了 PSL-MORL 或新方法。
 
-## 1. Official source budget semantics
+当前主配置是 [pd_morl.yaml](../configs/experiment/pd_morl.yaml)，工作流为 `PDMORLGPUWorkflow`。保留 PD-MORL 的向量 Q、偏好条件策略、HER、方向角损失和动态 RBF 锚点机制；并行采样与优化预算另行明确，不声称逐次优化轨迹与原版相同。
 
-The executable baseline is
-`PD-MORL/train_Walker2d_MO_TD3_HER.py`, with Walker settings from
-`PD-MORL/lib/utilities/settings.py`. The source starts `Cp=10` child workers.
-Each child calls `enumerate(exp_source)` and has no local `N` stop. The parent
-loop is `range(0, Cp * N, Cp)`, receives one queue item from every child per
-round, and performs one learner call per received item. Therefore the source
-meaning is **N rounds per worker**, not one global pool of N transitions.
+## 代码与实验位置
 
-| Counter | Initial value | Increment location | Increment | Stop / meaning |
-| --- | ---: | --- | ---: | --- |
-| child `time_step` | 0 | `enumerate(exp_source)` | 1 per child transition | queue metadata; not the parent stop counter |
-| parent `ts` | 0 | `for ts in range(0, Cp*N, Cp)` | `Cp` per round | loop end at `Cp*N`; source progress label |
-| `process_step_array` | 0 per worker | one queue item per worker | `time_step + 1` | episode/key/full evaluation bookkeeping |
-| learner calls | 0 | parent inner `for i in range(Cp)` | `Cp` per round | one update for each collected transition |
-| source budget | — | parent range | `N` rounds | `N=1,000,000` per worker |
+| 位置 | 用途 |
+| --- | --- |
+| 本地 `E:/projects/pd-morl` | 唯一开发主线 |
+| lab4090 `/home/qiuquanj/projects/pd-morl` | 同一主线的运行副本，使用现有 evorl Python 环境 |
+| 分支 `codex/pd-morl-mainline` | 两端统一版本，不向远程托管平台自动推送 |
+| 原 evorl、phsl-* 等工作区 | 已冻结为历史来源，原输出与 checkpoint 原位保留；完整位置见[归档说明](../archive/README.md) |
 
-Thus Walker has `N*Cp = 10,000,000` valid environment transitions. HER
-relabels are replay entries and are not environment transitions.
+主线以本地最新实现为基础，整合独立收敛评估、锚点替换诊断、最终保存、恢复计数和历史裁剪修复。原始状态在两端 `../archive/pd-morl-20261010/` 保存源码快照及文件校验清单。通过可编辑安装确保 lab4090 的 `import evorl` 指向主线，而不是旧目录。
 
-## 2. Official paper budget
+复现实验核对 `git_commit`、`runtime_source_sha256`、resolved config 与 artifact SHA。新的运行和验证写入主线的新输出目录，旧实验不重新标记为主线结果。
 
-Appendix B.3 Table 5 reports Walker main training with `N=1,000,000`, batch
-256, `gamma=.995`, `tau=.005`, replay capacity `2,000,000`, `Cp=10`, three
-HER preferences, learning rates `3e-4`, and one hidden layer of width 400 in
-the table. The executable source instead defines actor `19 -> 400 -> 400 -> 6`
-and twin critics `25 -> 400 -> 400 -> 2`; executable source takes precedence.
-Other settings are policy delay 10, exploration noise .1, target noise .2,
-target-noise clip .5, and actor-loss coefficient 10. The paper's six-run
-average is a repetition protocol, not six source workers in one run.
+## 从 key 预训练到最终评估
 
-## 3. EvoRL counter semantics
+1. **Key 预训练**：`scripts/train_brax_key_solutions.py` 分别训练三个单偏好策略，按各自偏好的评估标量回报保留最佳目标向量。当前 v3 元数据记录每个 key 2,000,128 条环境数据、batch 100、gamma 0.99、policy delay 2。该成本独立于主训练预算。
+2. **Artifact 验证**：使用 `scripts/validate_brax_key_solutions.py` 核对文件、元数据、key 顺序及插值数值。验证通过不等于验证策略已达到全局最优。
+3. **主训练**：加载固定 artifact，初始化 RBF，进行并行采样、HER 写入和 TD3 更新。
+4. **动态锚点**：三个 key 各评估三次，先求回报均值，再按原始回报的严格标量化改善替换；每次触发都重新拟合。
+5. **评估与结果**：区分 episode 触发的完整评估、固定 transition 间隔的收敛诊断、训练结束评估及独立 offline 评估。
 
-The formal config fixes `rollout_length=1`, `num_envs=process_count=10`, and
-`num_updates_per_iter=1`.
-
-| Counter | Shape / initial value | Per workflow round | HER included? | Stop / trigger use |
-| --- | --- | ---: | --- | --- |
-| `config.total_timesteps` | scalar, 10,000,000 in formal config | — | no | `learn()` stop budget; includes prefill exactly once |
-| `metrics.sampled_timesteps` | scalar, 0 then 1,530 prefill | +10 | no | `learn()` remaining-budget calculation and logging |
-| `metrics.iterations` | scalar, 0 | +1 | no | current workflow round and checkpoint step |
-| `extra_state.worker_steps` | `uint32[10]`, 0 then 153 after prefill | +1 per lane | no | random-action warm-up and source progress logging |
-| `extra_state.total_it` | scalar `uint32(0)` | +10 | no | source-equivalent learner-slot accounting only |
-| `extra_state.episode_count` | `uint32[10]`, 0 plus completed episodes | completed episodes per lane | no | key/full evaluation triggers |
-| critic optimizer steps | derived scalar, starts after prefill | +10 | no | one update per post-prefill collected worker transition |
-| actor optimizer steps | derived scalar | +1 for K=10, delay=10 | no | delayed policy update |
-| target updates | derived scalar | +1 for K=10, delay=10 | no | paired with actor update |
-| replay base inserts | replay state | +10 | no | physical source transitions stored |
-| replay HER inserts | replay state | activated after threshold | yes, only here | replay expansion, never environment count |
-| replay size | scalar buffer size | base + active HER, capped at 2M | yes | learner sampling availability |
-
-The current `total_it` field is an accounting field; it does not drive a
-schedule. It is incremented in `MOTD3Workflow.step()` by `process_count`.
-
-## 4. Source-to-EvoRL mapping
-
-Let `K=10`, `P=153` prefill steps per worker, and `R=N-P=999,847` be the
-number of post-prefill EvoRL workflow rounds:
+当前 artifact：
+[interp_objs_walker2d_brax_v3.txt](../configs/artifacts/interp_objs_walker2d_brax_v3.txt)，
+[对应元数据](../configs/artifacts/interp_objs_walker2d_brax_v3.metadata.json)。
 
 ```text
-final_worker_steps        = P + R = N
-valid_env_transitions     = (P + R) * K = N * K
-critic_optimizer_steps    = R * K
-actor_optimizer_steps     = floor(R*K / policy_delay)
-target_update_steps       = actor_optimizer_steps
+keys: [[0,1], [0.5,0.5], [1,0]]
+SHA-256: e8bce224c1b767d1588bde14a3560933a4f74262acd3982f2bd26889d79d3c93
 ```
 
-The corrected formal budget therefore has
+v1/v2、未版本化文件及被撤回的候选属于历史 artifact，不因文件名相似而替换 v3。
 
-```text
-valid_env_transitions  = 10,000,000
-critic updates         = 9,998,470
-actor updates          = 999,847
-target updates         = 999,847
+## 当前参数与计数口径
+
+| 项目 | GPU 并行版 |
+| --- | --- |
+| 环境 | Brax Walker2d，观测 17，动作 6，episode 上限 500 |
+| 二维奖励 | `(x_velocity + 1, 5 - sum(action**2))`；动作按环境边界处理 |
+| 网络 | Actor 和 twin critic 均为两层 400 |
+| 并行布局 | 10 个偏好组，每组 16 个环境，共 160 个环境 |
+| 一个 rollout iteration | 每环境 4 步，共 640 条 base transitions |
+| 一个 host chunk | 4 个 rollout iterations，共 2560 条 base transitions |
+| 预填充 / 主训练总预算 | 4160 / 10,000,960；总预算已包含预填充 |
+| 更新预算 | 每个 rollout 320 次 critic 更新，batch 512；每 10 次 critic 更新一次 actor 和 target |
+| gamma / tau / 学习率 | 0.995 / 0.005 / 0.0003 |
+| Replay / HER | 容量 2,000,000；超过 100,000 门槛后，每条新数据追加 3 个偏好重标记条目 |
+| 主训练精度 | float32，`matmul_precision=highest` |
+| 插值器归一化 | 初始目标逐行 L2；在线 refit 目标逐行 L1；原始回报保持原值 |
+| key/full 触发计数 | 每个偏好组累计完成的 episode 数整除 16，再检查所有组是否超过阈值 |
+
+环境预算只计 base transitions；HER 条目、评估 rollout 和 key 预训练单独核算。
+默认 10M 配置的训练部分为 3905 个 host chunks、15620 个 rollout iterations、4,998,400 次 critic 更新和 499,840 次 actor/target 更新。host chunk 与 iteration 不能混用。
+
+原版在优化启动后每条新 transition 约对应一次 critic 更新、batch 256；当前版为 0.5 次、batch 512。两者抽样条目总量相同不代表优化轨迹等价。按组平均 episode 触发也不同于原版十个单环境 worker 的触发频率。后续与 PSL-MORL 比较时应明确并统一这些预算和触发口径。
+
+## 评估文件分别表示什么
+
+| 文件或字段 | 含义 |
+| --- | --- |
+| `resolved_config.yaml`、`run_metadata.json` | 本次运行的配置、源码/设备和 artifact 信息 |
+| `counters_summary.json` | 采样与更新计数、计时；部分计数按调度推导，不能代替独立执行验证 |
+| `hv_history.csv` | episode 触发的 201 偏好 × 3 repeats 完整评估历史 |
+| `hv_convergence.csv` | 独立 51 偏好 × 3 repeats 诊断，默认每 250,000 transitions 检查，在 chunk 边界执行 |
+| `final_training_eval/results.json` | 1001 偏好 × 3 repeats 的训练结束评估 |
+| `evaluate_offline()` | 独立 1001 偏好 × 6 repeats；普通训练不因此自动产生六次 offline 结果 |
+| `source_hv` / `source_sparsity` | 先跨 repeats 求每个偏好的平均回报，再取非支配前沿并计算指标 |
+| `mean_repeat_hv` / `mean_repeat_sparsity` | 各 repeat 分别计算前沿指标，再对指标求均值 |
+
+HV 参考点为 `[0,0]`，二维目标按最大化处理。两种指标聚合口径不能混写；51 点诊断与 201/1001 点评估也不能直接拼成一条同口径曲线。不同训练 seed 的重复实验与一次评估的 repeats 是两件事。
+
+旧 `run_metadata.json` 的 `key_objective_normalization: l2` 曾被硬编码；即使目录叫 `l1_online_*`，该字段仍可能错误。历史 JSON 保留原貌，判断当时算法应交叉核对源码及实验记录，不能单凭字段或目录名推断。新运行分别记录 initial=L2、online=L1。
+
+## 常用入口
+
+以下命令从实际选定的仓库根目录执行。GPU 编号只是示例，运行前选择可用设备；输出目录应为新的实验目录。
+
+```bash
+# 检查最终配置，不启动训练
+python scripts/train.py --config-name experiment/pd_morl --cfg job
+
+# 验证当前 v3 artifact，不重新预训练或替换文件
+python scripts/validate_brax_key_solutions.py \
+  configs/artifacts/interp_objs_walker2d_brax_v3.txt \
+  --metadata configs/artifacts/interp_objs_walker2d_brax_v3.metadata.json
+
+# 主训练；Hydra 的实际目录使用 hydra.run.dir 指定
+CUDA_VISIBLE_DEVICES=0 python scripts/train.py \
+  --config-name experiment/pd_morl \
+  seed=42 hydra.run.dir=outputs/pd_morl_gpu_l1_seed42_new
+
+# 已有评估结果绘图，不重新评估
+python scripts/plot_pd_morl_hv.py \
+  --input outputs/RUN/hv_history.csv --output outputs/RUN/hv_history.png
 ```
 
-EvoRL prefill is `random_timesteps=1,530`, exactly 153 transitions per lane
-and 1,530 valid transitions globally. It is part of the official 10,000,000
-transition budget. Consequently `total_timesteps=10,000,000`, and the main
-workflow contributes the remaining `999,847 * 10 = 9,998,470` transitions.
+`pd_morl_brax_reference` 用于原版调度对照，`pd_morl_key_replacement_diagnostics` 继承主配置并开启记录；其余旧配置移入 archive/configs/experiment。本次整理只执行短验证，不启动正式长训练。
 
-## 5. Meaning of the Step8 smoke numbers
+## 保存、恢复与验证
 
-The Step8 reports (`critic=133,120`, `actor=13,312`, `target=13,312`) count
-optimizer applications, not minibatch rows or loss terms. They correspond to
-13,312 workflow rounds with K=10 source learner slots per round:
+当前主配置启用 `save_replay_buffer=true`，每 1564 个 rollout iterations 保存一次（1,000,960 条训练 transitions），保留最近两份。该间隔可被 fold_iters=4 整除；最终 checkpoint 在最终评估前保存，即使关闭最终评估也保存。这个持久化调整不改变学习更新预算。
 
-```text
-critic = 13,312 * 10 = 133,120
-actor  = floor(133,120 / 10) = 13,312
-```
+恢复入口仍需显式指定完整 checkpoint，并检查原配置中影响算法的参数；目前 artifact SHA 校验不能替代完整协议一致性检查。旧 `save_replay_buffer=false` 的快照可用于评估，不能作为完整续训状态。
 
-`total_it` has the same cumulative increment as the critic count in this
-configuration. The reported replay size (`238,640`) is physical replay
-entries (base transitions plus active HER relabels), not environment steps.
+独立 key 预训练入口现在显式使用并记录 `matmul_precision=highest`。这只定义新运行行为，不回填历史 artifact 未记录的精度。Artifact 验证器只读，取消写回未版本化文件的旧 promote 入口。
 
-## 6. HER accounting
+- [x] 将已有生命周期、收敛评估及诊断实现整合到统一主线。
+- [x] 明确 checkpoint 单位，并为主线启用完整续训状态。
+- [x] 统一初始 L2、在线 L1 的实现说明、测试和新元数据。
+- [x] 固定新 key 预训练的 matmul precision，保留历史精度信息的边界。
+- [ ] 正式续训时核对影响训练的配置；当前恢复入口仍只做有限校验。
+- [ ] 与 PSL-MORL 比较前冻结共用的数据预算、优化预算和评估触发口径。
 
-Every collected transition gets one base replay entry. After
-`buffer_size + 1 > her_start_timesteps * K`, the current JAX implementation
-adds three relabeled entries for that transition. With capacity 2M, replay
-size is capped, while environment and learner counters remain uncapped. This
-matches the source threshold and keeps HER out of `sampled_timesteps`.
+本次主线整理的最终验证结果在交付前更新。Brax 动力学与随机数流仍不同于原 MuJoCo 实现，不以论文 HV 数值作为接口正确性的唯一判据。
 
-## 7. Learner update ratio
+## 历史记录索引
 
-After the 1,530-entry prefill, the first workflow round inserts ten entries,
-crosses the 1,536-entry learner threshold, and makes K learner calls. The
-current parallel TD3 path then scans exactly K critic updates in every
-post-prefill workflow round and applies the delayed actor/target update at
-source-equivalent slot numbers. Therefore, over the optimizer-active portion,
+旧报告中的“当前”“下一步”“必须”和 PASS 结论均限于其当时版本，不构成现行任务或运行授权。旧文件集中移入 archive；原位置映射见 [moves.json](../archive/moves.json)，原工作区继续保留。
 
-```text
-environment transitions : critic optimizer steps = 1 : 1
-```
+| 历史阶段 | 记录 |
+| --- | --- |
+| 原版调度及 Step9 计数核对 | [原 Step9 协议](../archive/docs/PD_MORL_STEP9_PROTOCOL.md)、[Step9 验证](../archive/docs/PD_MORL_STEP9_0_1_VERIFICATION_REPORT.md) |
+| GPU 并行改造与早期性能探索 | [GPU v2 报告](../archive/docs/PD_MORL_GPU_NATIVE_V2_REPORT.md)、[当时的后续决策](../archive/docs/PD_MORL_GPU_NATIVE_V2_NEXT_DECISION.md) |
+| 初始化/在线统一 L2 的实验 | [JAX-L2 2M 报告](../archive/docs/PD_MORL_JAX_L2_2M_REPORT.md)、[旧微基准原始数据](../archive/docs/benchmark_pd_morl_jax_rbf_l2.json) |
+| Key 候选撤回与 v3 修正 | [Refresh 验证记录](../archive/docs/KEY_ARTIFACT_REFRESH_VALIDATION.md)、[修正计划](../archive/docs/PD_MORL_KEY_ARTIFACT_CORRECTION_PLAN.md)、[当时的基线快照](../archive/docs/PHSL_FIX_BASELINE.md) |
+| 旧稳定性、审查与阶段任务 | [稳定性复查](../archive/docs/PHSL_FIX_STABILITY_RECHECK.md)、[综合审查](../archive/docs/PD_MORL_COMPREHENSIVE_AUDIT_REPORT.md)、`archive/docs/guide/step*` 等阶段说明 |
 
-The formal config fixes `num_updates_per_iter=1`; no schedule change was made.
-
-## 8. Warm-up accounting
-
-The source uses per-worker `time_step < start_timesteps` for random actions;
-Walker therefore has a 10,000-step random-action phase in each logical lane.
-Learner startup is separately gated by replay size
-(`2*batch_size*weight_num = 1,536`) after the framework prefill. HER
-activation uses the global replay-size threshold
-`start_timesteps * Cp = 100,000`. EvoRL maps these to `worker_steps`,
-`start_timesteps=10,000`, `random_timesteps/learning_start_timesteps=1,530`,
-`learner_start_replay_entries=1,536`, and `her_start_timesteps=10,000` with
-`process_count=10`. The 1,530 value is the framework's initial replay-fill
-budget, not a replacement for the source random-action threshold. No algorithm
-schedule was changed by this audit.
-
-## 9. Evaluation timing
-
-Key replacement and full training evaluation remain episode-count driven:
-key evaluation is triggered when every logical lane advances past the current
-key episode counter; full evaluation is triggered at the corresponding 100
-episode cadence. They are not converted to fixed timestep intervals. The
-exact number during a 1M-worker-step run is data-dependent because episode
-completion counts depend on the environment trajectory.
-
-Training evaluation uses 201 preferences with three repeats. The training
-final hook uses 1001 preferences with three repeats. The separate explicit
-`evaluate_offline()` paper-report path uses 1001 preferences with six repeats.
-For every training, final, or offline repeat, sparsity first selects that
-repeat's maximization Pareto front and then applies the adjacent-gap formula;
-only the resulting per-repeat sparsities are averaged. The previous evaluator
-incorrectly applied the formula to all returns.
-
-## 10. Key pretraining accounting
-
-The loaded `configs/artifacts/interp_objs_walker2d.txt` is the traced key
-artifact used to initialize the main run. The paper's Walker key-solution
-pretraining budget (`N=2,000,000`, separate settings in Table 6) is not part
-of the Table 5 `N=1,000,000` main MO-TD3-HER budget. They are separate costs;
-this formal config does not silently charge pretraining to main training.
-
-## 11. Hyperparameter parity table
-
-| Item | Official Walker | Current formal config | Classification |
-| --- | --- | --- | --- |
-| main N | 1,000,000 per worker | `source_worker_steps=1,000,000` | MATCH |
-| batch | 256 | 256 | MATCH |
-| gamma / tau | .995 / .005 | .995 / .005 | MATCH |
-| replay capacity | 2,000,000 | 2,000,000 | MATCH |
-| workers K | 10 | 10 | MATCH |
-| HER relabels | 3 | 3 | MATCH |
-| actor / critic LR | 3e-4 / 3e-4 | 3e-4 / 3e-4 | MATCH |
-| hidden architecture | executable actor/critics have two 400-wide layers | `[400,400]` | MATCH; paper/source discrepancy recorded |
-| policy delay | 10 | 10 | MATCH |
-| exploration / target noise | .1 / .2, clip .5 | .1 / .2, clip .5 | MATCH |
-| actor-loss coefficient | 10 | 10 | MATCH |
-| gradient clipping | PyTorch total L2 norm, max 100, actor and critic | Optax global norm, max 100, same update order | MATCH; framework implementation mapping |
-| episode limit | 500 | 500 in formal config | MATCH at limit |
-| reward / done / reset | MuJoCo Walker path | Brax adapter | ENVIRONMENT DEVIATION (below) |
-| keys / interpolator | source key workflow | traced key artifact + interpolator state | FRAMEWORK-ADAPTATION |
-| evaluation grids | training 201/3, final 1001/3, offline 1001/6 | same | MATCH |
-
-The paper's Table 5 wording and executable network differ. Under the project
-rule that executable source wins, `[400,400]` is source-faithful. Mapping
-PyTorch `clip_grad_norm_` to Optax global-norm clipping changes framework
-syntax, not the algorithm parameter or clipping mathematics.
-
-## 12. Environment comparability
-
-| Property | Original source | EvoRL formal run |
-| --- | --- | --- |
-| observation | 17 (`qpos[1:]` + clipped `qvel`) | 17-dimensional Brax Walker adapter |
-| action | 6 | 6 |
-| objective 1 | forward velocity + 1 | `x_velocity + 1` |
-| objective 2 | `5 - sum(action**2)` | `5 - sum(action**2)` |
-| termination | Walker height/angle bounds | Brax termination plus truncation/autoreset wrapper |
-| episode limit | Gym/MuJoCo 500 | formal config 500 (default Brax is 1000) |
-| reset | small random perturbation | Brax reset/backend implementation |
-| physics | MuJoCo | Brax backend |
-
-The result name for a future run must therefore be **source-faithful PD-MORL
-reproduction with Brax environment adaptation**, not an exact MuJoCo paper
-reproduction.
-
-## 13. Training seed audit
-
-The executable source default is seed 1 and derives child seeds as
-`p_id * args.seed`. The paper specifies six runs but the source, README, and
-local paper do not provide six numeric training seeds. Therefore:
-
-**OFFICIAL TRAINING SEEDS NOT SPECIFIED.**
-
-Any later `0..5` (or other set) are experiment seeds, not official seed values.
-
-## 14. Evaluation protocol
-
-Training: 201 preferences and three repeats. Training final hook: 1001
-preferences and three repeats. Explicit offline/paper-report evaluation: 1001
-preferences and six repeats with the frozen evaluation seed list
-`[0,11,22,33,44,55]`. Evaluation randomness is not derived from the training
-seed by a new protocol. Hypervolume uses frozen reference point `[0,0]`;
-Sparsity follows the official source order independently for every repeat:
-Pareto filter per repeat -> adjacent gap formula -> mean across repeats.
-Previous evaluator implementation incorrectly applied sparsity to all evaluation
-returns without Pareto filtering; this has been corrected and verified via Golden Tests.
-The mean-return Pareto front remains a separate display artifact. No tolerance
-was changed.
-
-## 15. Paper reference metrics
-
-The paper reports Walker reference values over six runs: HV
-`5.41 ± 0.004 × 10^6`, sparsity `0.03 ± 0.005 × 10^4`, reference point
-`(0,0)`. Because the formal run uses Brax, these are **reference-only** and
-are not a pass/fail threshold.
-
-## 16. Dry-run counter test
-
-Command executed:
-
-```text
-python scripts/test_pd_morl_counters.py
-```
-
-It uses K=10, batch 256, `[400,400]`, policy delay 10, and three HER
-relabels, while shortening only the budget to 100 worker steps. It passed with:
-
-```json
-{
-  "workflow_rounds": 97,
-  "final_worker_steps": 100,
-  "valid_env_transitions": 1000,
-  "prefill_env_transitions": 30,
-  "replay_base_inserts": 1000,
-  "replay_her_inserts": 2400,
-  "replay_total_entries_written": 3400,
-  "critic_optimizer_steps": 970,
-  "actor_optimizer_steps": 97,
-  "target_update_steps": 97
-}
-```
-
-## 17. Formal reproduction config
-
-`configs/experiment/pd_morl_walker_reproduction.yaml` is the source-equivalent
-budget contract. Hydra resolution was validated with:
-
-```text
-python scripts/train.py --config-name experiment/pd_morl_walker_reproduction --cfg job
-```
-
-Startup logging emits `SOURCE_N`, `K`, `PREFILL_GLOBAL_TRANSITIONS`,
-`PREFILL_STEPS_PER_WORKER`, `POST_PREFILL_WORKFLOW_ROUNDS`, final worker and
-transition expectations, and expected critic/actor/target optimizer counts.
-It rejects a `total_timesteps` value that adds prefill twice. Run completion
-asserts exact worker steps, sampled transitions, and the prefill plus
-post-prefill identity. Full training evaluations and the training-final evaluation persist their
-returns, HV/sparsity per repeat, mean metrics, and Pareto progression in
-`pd_morl_evaluations.jsonl`; checkpoints retain model/optimizer/replay and
-interpolator state. The config is intentionally not launched in Step9.0.
-
-The formal environment `/home/qiuquanj/miniforge3/envs/evorl` uses Python
-3.11.16 and `orbax-checkpoint` 0.12.4. Its project `save`/`load` checkpoint
-roundtrip passed. The separate Windows interpreter's Orbax import failure is
-therefore an **EXTERNAL ENVIRONMENT ISSUE — NON-BLOCKING**.
-
-## 18. Expected runtime and resources (ESTIMATE)
-
-Step8 production-shape smoke is the only local timing anchor. The formal run
-has approximately 10,000,000 valid transitions, so wall time is roughly the
-smoke wall time multiplied by its measured transition ratio; evaluation and
-checkpoint I/O can dominate near evaluation triggers. Replay capacity 2M plus
-checkpoints requires several GB of disk in a typical float32 Walker run. The
-actual runtime, peak memory, checkpoint size, and evaluation cost must be
-measured by the first explicitly authorized single-seed run; these are
-estimates, not results.
-
-## 19. Remaining deviations
-
-1. Physics is Brax rather than the source MuJoCo backend.
-2. Official numeric training seeds are unspecified; future seeds must be
-   labeled experiment seeds.
-3. The paper table describes one 400-wide hidden layer, while executable
-   source and EvoRL use `[400,400]`; executable source is the baseline.
-4. Worker randomness is JAX lane-split in EvoRL rather than the source's
-   process-local Python/NumPy streams; this is a framework RNG adaptation.
-
-These are documented scope boundaries. No algorithm schedule, Step6
-tolerance, data-parallel learner, or production run was changed or started.
-
-## Gate result
-
-All 21 Step9.0 gates are explicit: source N and stop semantics, transition and
-learner accounting, total-it meaning, HER separation, warm-up, evaluation
-triggers, key-pretraining separation, hyperparameters, environment deviation,
-seed search, six-run protocol, dry-run arithmetic, formal config, and unchanged
-algorithm/tolerance behavior.
-
-**STEP9.0 PD-MORL REPRODUCTION PROTOCOL PASS**
-
-Suggested next command (do not execute automatically): one full Walker seed
-using the formal config, after user authorization.
+当前模块细节见 [插值器](PD_MORL_INTERPOLATOR.md) 与 [控制评估](PD_MORL_CONTROL_EVAL.md)。新增实验只在其运行目录保存原始结果，并更新本文件必要的状态与链接，不再新增一套重复的主状态文档。

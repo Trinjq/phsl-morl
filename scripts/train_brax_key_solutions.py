@@ -591,6 +591,7 @@ def run_full(output_dir: Path) -> None:
         "git_commit": _git_commit(),
         "command": sys.argv,
         "jax_version": jax.__version__,
+        "matmul_precision": str(jax.config.jax_default_matmul_precision),
         "jax_backend": jax.default_backend(),
         "jax_devices": [repr(device) for device in jax.devices()],
     }
@@ -599,6 +600,7 @@ def run_full(output_dir: Path) -> None:
 
 
 def main() -> None:
+    jax.config.update("jax_default_matmul_precision", "highest")
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/key_retrain"))
     parser.add_argument("--smoke", action="store_true")

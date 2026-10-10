@@ -1,3 +1,4 @@
+import csv
 import hashlib
 import importlib.metadata
 import json
@@ -183,6 +184,42 @@ def _resolve_resume_checkpoint(config: DictConfig) -> Path | None:
     return max(candidates, key=lambda child: int(child.name))
 
 
+def _copy_history_to_resume_point(
+    source: Path, target: Path, sampled_timesteps: int
+) -> None:
+    if not source.exists() or source.stat().st_size == 0:
+        return
+    with source.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames
+        if not fieldnames or "actual_env_transitions" not in fieldnames:
+            raise ValueError(f"history has no actual_env_transitions: {source}")
+        rows = list(reader)
+    try:
+        kept = [
+            row
+            for row in rows
+            if int(row["actual_env_transitions"]) <= sampled_timesteps
+        ]
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(f"invalid history transition in {source}") from error
+
+    if source.resolve() == target.resolve():
+        if len(kept) != len(rows):
+            raise ValueError(
+                "resuming an older checkpoint requires a new output_dir; "
+                f"history contains rows after {sampled_timesteps}"
+            )
+        return
+    if target.exists():
+        raise FileExistsError(f"resume target history already exists: {target}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(kept)
+
+
 def _restore_checkpoint(config, workflow, state, metadata):
     checkpoint_path = _resolve_resume_checkpoint(config)
     if checkpoint_path is None:
@@ -201,30 +238,30 @@ def _restore_checkpoint(config, workflow, state, metadata):
             raise ValueError(
                 f"checkpoint Artifact SHA mismatch: saved={saved_sha} current={current_sha}"
             )
-    for name in ("hv_history.csv", "hv_convergence.csv"):
-        source_history = output_root / name
-        target_history = Path(config.output_dir) / name
-        if (
-            source_history.exists()
-            and source_history.resolve() != target_history.resolve()
-            and not target_history.exists()
-        ):
-            target_history.write_bytes(source_history.read_bytes())
     from evorl.utils.orbax_utils import load
 
     restored = load(str(checkpoint_path), state)
     sampled = int(restored.metrics.sampled_timesteps)
     if sampled <= 0:
         raise ValueError("checkpoint has no sampled transitions")
+    for name in ("hv_history.csv", "hv_convergence.csv"):
+        _copy_history_to_resume_point(
+            output_root / name, Path(config.output_dir) / name, sampled
+        )
     if hasattr(workflow, "runtime_counters"):
         extra = restored.agent_state.extra_state
         critic_steps = int(extra.total_it)
         iterations = int(restored.metrics.iterations)
+        fold_iters = int(config.fold_iters)
+        if fold_iters <= 0 or iterations % fold_iters:
+            raise ValueError(
+                "checkpoint iterations are not aligned to complete host chunks"
+            )
         actor_steps = critic_steps // int(config.actor_update_interval)
         workflow.runtime_counters.update(
             {
-                "host_chunk_count": iterations,
-                "inner_rollout_count": iterations * int(config.fold_iters),
+                "host_chunk_count": iterations // fold_iters,
+                "inner_rollout_count": iterations,
                 "environment_step_count": sampled,
                 "critic_optimizer_step_count": critic_steps,
                 "actor_optimizer_step_count": actor_steps,
@@ -241,9 +278,18 @@ def _restore_checkpoint(config, workflow, state, metadata):
                 for line in diagnostics_path.read_text(encoding="utf-8").splitlines()
                 if line
             ]
-            if rows:
+            eligible = [
+                row
+                for row in rows
+                if (
+                    int(row.get("base_inserts", sampled + 1)) <= sampled
+                    if "base_inserts" in row
+                    else int(row.get("iteration", iterations + 1)) <= iterations
+                )
+            ]
+            if eligible:
                 workflow.runtime_counters["key_replacement_count"] = int(
-                    rows[-1].get("key_replacement_count", 0)
+                    eligible[-1].get("key_replacement_count", 0)
                 )
     if metadata:
         metadata["resumed_from_checkpoint"] = str(checkpoint_path)
@@ -763,7 +809,7 @@ def train(config: DictConfig) -> None:
                 else "source-faithful PD-MORL reproduction with Brax environment adaptation"
             ),
             "interpolator_backend": "jax",
-            "key_objective_normalization": "l2",
+            "key_objective_normalization": {"initial": "l2", "online": "l1"},
             "key_artifact_path": str(artifact_path.resolve()),
             "key_artifact_sha256": hashlib.sha256(
                 artifact_path.read_bytes().replace(b"\r\n", b"\n")

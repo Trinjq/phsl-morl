@@ -1,255 +1,55 @@
-<h1 align="center">
-  <a href="https://github.com/EMI-Group/evox">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/_static/evox_logo_dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset="docs/_static/evox_logo_light.svg">
-      <img alt="EvoX Logo" height="50" src="docs/_static/evox_logo_light.svg">
-    </picture>
-  </a>
-</h1>
+# PD-MORL：EvoRL / Brax GPU 并行基线
 
-<p align="center">
-  <img src="https://github.com/google/brax/raw/main/docs/img/humanoid_v2.gif", width=160, height=160/>
-  <img src="https://github.com/kenjyoung/MinAtar/raw/master/img/breakout.gif", width=160, height=160>
-  <img src="https://raw.githubusercontent.com/instadeepai/jumanji/main/docs/env_anim/bin_pack.gif", width=160, height=160>
-</p>
+当前阶段：建立 PD-MORL 并行基线；随后在同一框架上复现 PSL-MORL，再实现基于 PSL-MORL 的新方法。
 
-<h2 align="center">
-  <p>🌟 EvoRL: A GPU-accelerated Framework for Evolutionary Reinforcement Learning 🌟</p>
-  <a href="https://arxiv.org/abs/2501.15129">
-    <img src="https://img.shields.io/badge/paper-arxiv-red?style=for-the-badge" alt="EvoRL Paper on arXiv">
-  </a>
-</h2>
+**唯一开发主线**：本地 `E:/projects/pd-morl`，lab4090 `/home/qiuquanj/projects/pd-morl`，分支 `codex/pd-morl-mainline`。从[当前协议](docs/PD_MORL_REPRODUCTION_PROTOCOL.md)了解算法、预算和评估口径。
 
+## 运行
 
-# Table of Contents
-- [Table of Contents](#table-of-contents)
-- [Introduction](#introduction)
-  - [Highlight](#highlight)
-    - [Update](#update)
-  - [Documentation](#documentation)
-  - [Overview of Key Concepts in EvoRL](#overview-of-key-concepts-in-evorl)
-- [Installation](#installation)
-- [Quickstart](#quickstart)
-  - [Training](#training)
-  - [Logging](#logging)
-  - [Env Rendering](#env-rendering)
-- [Algorithms](#algorithms)
-- [RL Environments](#rl-environments)
-  - [Current Supported Environments](#current-supported-environments)
-- [Performance](#performance)
-- [Bug report \& Discussion](#bug-report--discussion)
-- [Acknowledgement](#acknowledgement)
-  - [Citing EvoRL](#citing-evorl)
+在 lab4090 的主仓库根目录，使用已有 evorl 环境：
 
+```bash
+cd /home/qiuquanj/projects/pd-morl
+PY=/home/qiuquanj/miniforge3/envs/evorl/bin/python
+$PY -c 'import evorl; print(evorl.__file__)'
+$PY scripts/train.py --config-name experiment/pd_morl --cfg job
+$PY scripts/validate_brax_key_solutions.py configs/artifacts/interp_objs_walker2d_brax_v3.txt
 
-# Introduction
-
-EvoRL is a fully GPU-accelerated framework for Evolutionary Reinforcement Learning, which is implemented by JAX and provides end-to-end GPU-accelerated training pipelines, including following processes:
-
-- Reinforcement Learning (RL)
-- Evolutionary Computation (EC)
-- Environment Simulation
-
-EvoRL provides a highly efficient and user-friendly platform to develop and evaluate RL, EC and EvoRL algorithms.
-
-> [!NOTE]
-> EvoRL is a sister project of [EvoX](https://github.com/EMI-Group/evox).
-
-## Highlight
-
-- **End-to-end training pipelines**: The training pipelines for RL, EC and EvoRL are entirely executed on GPUs, eliminating dense communication between CPUs and GPUs in traditional implementations and fully utilizing the parallel computing capabilities of modern GPU architectures.
-  - Most algorithms has a `Workflow.step()` function that is capable of `jax.jit` and `jax.vmap()`, supporting parallel training and JIT on full computation graph.
-- **Easy integration between EC and RL**: Due to modular design, EC components can be easily plug-and-play in workflows and cooperate with RL.
-- **Implementation of EvoRL algorithms**: Currently, we provide two popular paradigms in Evolutionary Reinforcement Learning: Evolution-guided Reinforcement Learning (ERL): ERL, CEM-RL; and Population-based AutoRL: PBT.
-- **Unified Environment API**: Support multiple GPU-accelerated RL environment packages (eg: Brax, gymnax, ...). Multiple Env Wrappers are also provided.
-- **Object-oriented functional programming model**: Classes define the static execution logic and their running states are stored externally.
-
-### Update
-
-- 2025-07-14: Our paper *"EvoRL: A GPU-accelerated Framework for Evolutionary Reinforcement Learning"* is accepted by ACM TELO.
-
-- 2025-04-01: Add support for Mujoco Playground Environments.
-
-## Documentation
-
-- For comprehensive guidance, please visit our [Documentation](https://evorl.readthedocs.io/latest/), where you'll find detailed installation steps, tutorials, practical examples, and complete API references.
-
-- EvoRL is also indexed by DeepWiki, providing an AI assistant for beginners. Feel free to ask any question about this repo at https://deepwiki.com/EMI-Group/evorl.
-
-## Overview of Key Concepts in EvoRL
-
-![](docs/_static/evorl_arch.svg)
-
-- **Workflow** defines the training logic of algorithms.
-- **Agent** defines the behavior of a learning agent, and its optional loss functions.
-- **Env** provides a unified interface for different environments.
-- **SampleBatch** is a data structure for continuous trajectories or shuffled transition batch.
-- **EC** module provide EC components like Evolutionary Algorithms (EAs) and related operators.
-
-
-
-# Installation
-
-EvoRL is developed on the top of `jax`. So `jax` should be installed first, please follow [JAX official installation guide](https://jax.readthedocs.io/en/latest/quickstart.html#installation). Since EvoRL is currently under development, we recommend installing the package from source.
-
-```shell
-# Install the evorl package from source
-git clone https://github.com/EMI-Group/evorl.git
-cd evorl
-pip install -e .
+# 选择可用 GPU；每次使用新的输出目录
+CUDA_VISIBLE_DEVICES=0 $PY scripts/train.py \
+  --config-name experiment/pd_morl seed=42 \
+  hydra.run.dir=outputs/pd_morl_seed42_NEW
 ```
 
-For developers, see [Contributing to EvoRL](https://evorl.readthedocs.io/latest/dev/contributing.html)
+导入路径应位于本仓库。若环境尚未指向主线，执行 `$PY -m pip install -e . --no-deps --no-build-isolation`。从其他目录运行脚本也应使用这一安装环境。
 
-# Quickstart
+## 目录与入口
 
-## Training
+| 路径 | 用途 |
+| --- | --- |
+| `evorl/` | 统一算法与框架实现，供 PD-MORL 及后续 PSL-MORL 共用 |
+| `configs/experiment/pd_morl.yaml` | 唯一默认 GPU 并行训练配置 |
+| `configs/experiment/pd_morl_brax_reference.yaml` | 10 个单环境 worker 的调度对照，不作为默认主线 |
+| `configs/experiment/pd_morl_key_replacement_diagnostics.yaml` | 继承主配置，只开启锚点记录 |
+| `configs/artifacts/` | 当前 v3 artifact 与对应元数据 |
+| `scripts/train.py` | 主训练及完整 checkpoint 恢复 |
+| `scripts/train_brax_key_solutions.py`、`validate_brax_key_solutions.py` | 独立 key 预训练与只读验证 |
+| `scripts/plot_pd_morl_hv.py`、`plot_pd_morl_convergence.py` | 两种评估历史的独立绘图 |
+| `scripts/analyze_key_replacements.py` | 分析锚点替换诊断 |
+| `scripts/export_pd_morl_hv_history.py`、`aggregate_pd_morl_runs.py` | 已有评估记录导出与整理 |
+| `scripts/benchmark_pd_morl_jax_rbf.py` | 当前在线 L1 插值器微基准 |
+| `tests/` | 当前实现的回归测试 |
+| `outputs/` | 本主线的新实验；与历史实验目录分开 |
+| [archive/](archive/README.md) | 旧脚本、配置、artifact、报告及迁移映射 |
 
-EvoRL uses [hydra](https://hydra.cc/) to manage configs and run algorithms. Users can use `scripts/train.py` or `script/train_dist.py` to run algorithms from CLI.
+已有 v3 artifact 可直接验证并用于主训练，不需要每次重新预训练。验证器不会自动替换 artifact；下一版 artifact 应使用新的版本文件和显式配置。
 
-```text
-# hierarchy of folder `configs/`
-configs
-├── agent
-│   ├── ppo.yaml
-│   ├── ...
-...
-├── config.yaml
-├── env
-│   ├── brax
-│   │   ├── ant.yaml
-│   │   ├── ...
-│   ├── envpool
-│   └── gymnax
-└── logging.yaml
-```
+## 历史实验与参考资料
 
-Specify the `agent` and `env` field based on the related config file path (`*.yaml`) in `configs` folder. For example: To train the *PPO* agent with config file in `configs/agent/ppo.yaml` on the Brax environment *Ant* with config file in `configs/env/brax/ant.yaml`, use:
+历史输出、checkpoint 和日志保留在原工作区，不覆盖、不迁移、不改写原元数据。归档目录 `../archive/pd-morl-20261010/` 保存整理前源码快照和文件 SHA-256 清单；旧工作区 README 标记为历史用途。详细位置见[归档说明](archive/README.md)。
 
-```shell
-python scripts/train.py agent=ppo env=brax/ant
+本地 `../pdmorl_source` 是原版 PD-MORL 参考源码；`../psl_morl_analysis` 是下一阶段的论文/方法资料。已有结果图与分析目录原位保留，不能当作新主线重新运行所得结果。
 
-# Parallel training two seeds on each GPU.
-CUDA_VISIBLE_DEVICES=0,5 python scripts/train_dist.py -m hydra/launcher=joblib \
-    agent=exp/ppo/brax/ant env=brax/ant seed=114,514
-```
+主线默认保存完整 replay checkpoint，约每 100 万条新训练数据保存一次，保留最近两份；结束时先完成保存，再进行最终评估。主训练的 160 环境、K=320、batch=512、在线 L1 等学习设置保持当前并行基线口径。
 
-If multiple GPUs are detected, most algorithms will be automatically trained in distributed mode.
-
-For more advanced usage, see our documentation: [Training](https://evorl.readthedocs.io/latest/guide/quickstart.html#advanced-usage).
-
-## Logging
-
-When not using [multi-run mode](https://hydra.cc/docs/tutorials/basic/running_your_app/multi-run/) (without `-m`), the outputs will be stored in `./outputs`. When using [multi-run mode](https://hydra.cc/docs/tutorials/basic/running_your_app/multi-run/) (`-m`), the outputs will be stored in `./multirun`. Specifically, when launching algorithms from the training scripts, the log file and checkpoint files will be stored in `./outputs|multirun/train|train_dist/<timestamp>/<exp-name>/`.
-
-By default, the training script will enable two recorders for logging: `LogRecorder` and `WandbRecorder`. `LogRecorder` will save logs (`*.log`) in the above path, and `WandbRecorder` will upload the data to [WandB](https://wandb.ai/site/), which provides beautiful visualizations.
-
-Screenshot in WandB dashboard:
-
-![](docs/_static/evorl_wandb.png)
-
-## Env Rendering
-
-We provide some example visualization scripts for brax and playground environments: [visualize_mjx.ipynb](./scripts/visualize_mjx.ipynb).
-
-# Algorithms
-
-Currently, EvoRL supports 4 types of algorithms
-
-| Type                    | Algorithms                                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
-| RL                      | A2C, PPO, IMPALA, DQN, DDPG, TD3, SAC, TD7                                                                    |
-| EA                      | OpenES, VanillaES, ARS, CMA-ES, algorithms from [EvoX](https://github.com/EMI-Group/evox) (PSO, NSGA-II, ...) |
-| Evolution-guided RL     | ERL-GA, ERL-ES, ERL-EDA, CEMRL, CEMRL-OpenES                                                                  |
-| Population-based AutoRL | PBT family (e.g: PBT-PPO, PBT-SAC, PBT-CSO-PPO)                                                               |
-
-# RL Environments
-
-By default, `pip install evorl` will automatically install environments on `brax`. If you want to use other supported environments, please install the additional environment packages. We provide useful extras for different environments.
-
-For example:
-
-```shell
-# ===== GPU-accelerated Environments =====
-# Mujoco playground Envs:
-pip install -e ".[mujoco-playground]"
-# gymnax Envs:
-pip install -e ".[gymnax]"
-# Jumanji Envs:
-pip install -e ".[jumanji]"
-# JaxMARL Envs:
-pip install -e ".[jaxmarl]"
-
-# ===== CPU-based Environments =====
-# EnvPool Envs:
-pip install -e ".[envpool]"
-# Gymnasium Envs:
-pip install -e ".[gymnasium]"
-```
-
-> [!WARNING]
-> These additional environments have limited supports and some algorithms are incompatible with them.
-
-## Current Supported Environments
-
-| Environment Library                                                        | Descriptions                            |
-| -------------------------------------------------------------------------- | --------------------------------------- |
-| [Brax](https://github.com/google/brax)                                     | Robotic control                         |
-| [MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground)  | Robotic control                         |
-| [gymnax (experimental)](https://github.com/RobertTLange/gymnax)            | classic control, bsuite, MinAtar        |
-| [JaxMARL (experimental)](https://github.com/FLAIROx/JaxMARL)               | Multi-agent Envs                        |
-| [Jumanji (experimental)](https://github.com/instadeepai/jumanji)           | Game, Combinatorial optimization        |
-| [EnvPool (experimental)](https://github.com/sail-sg/envpool)               | High-performance CPU-based environments |
-| [Gymnasium (experimental)](https://github.com/Farama-Foundation/Gymnasium) | Standard CPU-based environments         |
-
-PRs for other environment libraries are welcomed.
-
-# Performance
-
-Test settings:
-
-- Hardware:
-  - 2x Intel Xeon Gold 6132 (56 logical cores in total)
-  - 128 GiB RAM
-  - 1x Nvidia RTX 3090
-- Task: Swimmer
-
-![](docs/_static/es-perf.png)
-![](docs/_static/erl-pbt-perf.png)
-
-# Bug report & Discussion
-
-To keep our project organized, please use the appropriate GitHub section:
-
-- [Issues](https://github.com/EMI-Group/evorl/issues) – For reporting **bugs** and **PR** only. When submitting an issue, please provide clear details to help with troubleshooting.
-- [Discussions](https://github.com/EMI-Group/evorl/discussions) – For general questions, feature requests, and other topics.
-
-Before posting, kindly check existing issues and discussions to avoid duplicates. Thank you for your contributions!
-
-# Acknowledgement
-
-- [acme](https://github.com/google-deepmind/acme)
-- [EvoX](https://github.com/EMI-Group/evox)
-- [Brax](https://github.com/google/brax)
-- [MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground)
-- [Jumanji](https://github.com/instadeepai/jumanji)
-- [JaxMARL](https://github.com/FLAIROx/JaxMARL)
-- [gymnax](https://github.com/RobertTLange/gymnax)
-- [EnvPool](https://github.com/sail-sg/envpool)
-
-## Citing EvoRL
-
-If you use EvoRL in your research and want to cite it in your work, please use:
-
-```
-@article{zheng2025evorl,
-  author  = {Zheng, Bowen and Cheng, Ran and Tan, Kay Chen},
-  doi     = {10.1145/3750053},
-  journal = {ACM Trans. Evol. Learn. Optim.},
-  month   = aug,
-  title   = {EvoRL: A GPU-accelerated Framework for Evolutionary Reinforcement Learning},
-  url     = {https://doi.org/10.1145/3750053},
-  year    = {2025}
-}
-```
+当前协议内维护唯一的待核对清单。历史报告中的“下一步”“必须”和旧 PASS 状态不再驱动新实验。

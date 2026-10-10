@@ -20,4 +20,6 @@ hv_history:
   console_output: false
 convergence_eval:
   enable: false
+key_diagnostics:
+  enable: false
 recorders: [log, wandb]

@@ -45,7 +45,7 @@ def _append(path, threshold, actual, hv=5.0, run_id="seed15"):
 
 def test_target_config_composes_with_independent_protocols():
     with initialize(version_base=None, config_path="../configs"):
-        config = compose(config_name="experiment/pd_morl_brax_gpu_native_v2")
+        config = compose(config_name="experiment/pd_morl")
     assert "interval_timesteps" not in config.hv_history
     assert config.convergence_eval.interval_transitions == 250_000
     assert config.convergence_eval.preference_step == 0.02

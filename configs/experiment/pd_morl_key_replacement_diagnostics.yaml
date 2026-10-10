@@ -1,0 +1,10 @@
+# @package _global_
+defaults:
+  - pd_morl
+  - _self_
+
+key_diagnostics:
+  enable: true
+
+run_id: key_replacement_diagnostics_seed_${seed}
+output_dir: outputs/key_diagnostics/seed_${seed}

@@ -1,0 +1,17 @@
+{
+  "backend": "jax",
+  "normalization": "l2",
+  "device": "cuda:0",
+  "jax_version": "0.10.2",
+  "artifact": "configs/artifacts/interp_objs_walker2d_brax.txt",
+  "artifact_sha256": "989e74d631ba74572884c4f32b19e12c9317af847ffbc6c02bdde5ad39bfa209",
+  "refits": 1000,
+  "compile_seconds": 0.544666594825685,
+  "steady_refit_seconds": 0.000875654336065054,
+  "grid_1001_seconds": 0.5984962969087064,
+  "scipy_reference_seconds": {
+    "scipy_l1": 5.756867118179798e-05,
+    "scipy_l2": 1.8799020908772944e-05
+  },
+  "grid_finite": true
+}

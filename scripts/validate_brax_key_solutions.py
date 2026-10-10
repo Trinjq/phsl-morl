@@ -1,9 +1,8 @@
-"""Validate and optionally promote a completed Brax key artifact."""
+"""Validate a completed, versioned Brax key artifact without modifying it."""
 
 import argparse
 import hashlib
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -96,18 +95,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("artifact", type=Path)
     parser.add_argument("--metadata", type=Path)
-    parser.add_argument("--promote", action="store_true")
     args = parser.parse_args()
-    metadata_path = args.metadata or args.artifact.with_name(
-        "interp_objs_walker2d_brax.metadata.json"
-    )
+    metadata_path = args.metadata or args.artifact.with_suffix(".metadata.json")
     result = validate(args.artifact, metadata_path)
-    if args.promote:
-        target = Path("configs/artifacts/interp_objs_walker2d_brax.txt")
-        target_metadata = target.with_name("interp_objs_walker2d_brax.metadata.json")
-        shutil.copyfile(args.artifact, target)
-        shutil.copyfile(metadata_path, target_metadata)
-        result["promoted_to"] = str(target)
     print(json.dumps(result, indent=2))
 
 

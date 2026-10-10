@@ -62,7 +62,7 @@ def main():
 
     result = {
         "backend": "jax",
-        "normalization": "l2",
+        "normalization": "l1",
         "device": str(jax.devices()[0]),
         "jax_version": jax.__version__,
         "artifact": str(args.artifact),
