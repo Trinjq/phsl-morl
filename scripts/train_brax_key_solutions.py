@@ -17,7 +17,11 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from evorl.algorithms.mo_td3 import PreferenceActor, TwinVectorCritic
+from evorl.algorithms.mo_td3 import (
+    PreferenceActor,
+    TwinVectorCritic,
+    twin_smooth_l1_loss,
+)
 from evorl.envs.brax import create_wrapped_brax_env
 from evorl.envs.wrappers.training_wrapper import AutoresetMode
 from evorl.replay_buffers import ReplayBuffer
@@ -255,6 +259,7 @@ def train_single_key(
                     inner_target_actor,
                     inner_target_critic,
                     inner_step,
+                    inner_last_actor_loss,
                 ) = inner
                 sample_key, noise_key = jax.random.split(step_key)
                 sample = replay.sample(current_replay, sample_key)
@@ -290,7 +295,7 @@ def train_single_key(
                     values = critic.apply(
                         params, sample.obs, sampled_preference, sample.actions
                     )
-                    return jnp.mean(optax.huber_loss(values, target_q[..., None, :]))
+                    return twin_smooth_l1_loss(values, target_q)
 
                 critic_loss_value, critic_grad = jax.value_and_grad(critic_loss)(
                     inner_critic
@@ -300,6 +305,7 @@ def train_single_key(
                 )
                 inner_critic = optax.apply_updates(inner_critic, critic_updates)
                 inner_step = inner_step + 1
+                should_update_actor = inner_step % POLICY_FREQ == 0
 
                 def update_actor(params, params_opt, target_actor, target_critic):
                     def actor_loss(actor_params):
@@ -340,13 +346,16 @@ def train_single_key(
                     inner_target_critic,
                     actor_loss_value,
                 ) = jax.lax.cond(
-                    inner_step % POLICY_FREQ == 0,
+                    should_update_actor,
                     update_actor,
                     skip_actor,
                     inner_actor,
                     inner_actor_opt,
                     inner_target_actor,
                     inner_target_critic,
+                )
+                inner_last_actor_loss = jnp.where(
+                    should_update_actor, actor_loss_value, inner_last_actor_loss
                 )
                 return (
                     inner_critic,
@@ -356,7 +365,8 @@ def train_single_key(
                     inner_target_actor,
                     inner_target_critic,
                     inner_step,
-                ), (critic_loss_value, actor_loss_value)
+                    inner_last_actor_loss,
+                ), critic_loss_value
 
             inner = (
                 current_critic,
@@ -366,6 +376,7 @@ def train_single_key(
                 current_target_actor,
                 current_target_critic,
                 critic_step,
+                jnp.asarray(jnp.nan, dtype=jnp.float32),
             )
             update_keys = jax.random.split(update_key, update_count)
             inner, losses = jax.lax.scan(update_step, inner, update_keys)
@@ -377,6 +388,7 @@ def train_single_key(
                 current_target_actor,
                 current_target_critic,
                 critic_step,
+                last_actor_loss,
             ) = inner
             return (
                 key,
@@ -391,8 +403,8 @@ def train_single_key(
                 critic_step,
             ), PyTreeDict(
                 completed_episodes=completed_episodes,
-                critic_loss=losses[0][-1],
-                actor_loss=jnp.max(losses[1]),
+                critic_loss=losses[-1],
+                actor_loss=last_actor_loss,
             )
 
         return train_chunk
@@ -493,6 +505,8 @@ def train_single_key(
         raise AssertionError(f"critic count mismatch: {final_metrics}")
     if not np.isfinite(final_metrics["last_critic_loss"]):
         raise FloatingPointError("non-finite critic loss")
+    if not np.isfinite(final_metrics["last_actor_loss"]):
+        raise FloatingPointError("non-finite actor loss")
     if best_vector is None or not np.isfinite(best_vector).all():
         raise FloatingPointError("no finite evaluation result")
     return best_vector, {
@@ -532,6 +546,8 @@ def run_smoke(output_dir: Path) -> None:
     assert np.isfinite(result).all()
     assert run_metadata["counts"]["critic_optimizer_step_count"] == 313
     assert np.isfinite(run_metadata["counts"]["last_critic_loss"])
+    assert np.isfinite(run_metadata["counts"]["last_actor_loss"])
+    assert run_metadata["counts"]["last_actor_loss"] != 0.0
     _write_metadata(output_dir / "smoke.json", run_metadata)
 
 
@@ -560,6 +576,7 @@ def run_full(output_dir: Path) -> None:
             "batch_size": BATCH_SIZE,
             "replay_capacity": REPLAY_CAPACITY,
             "policy_freq": POLICY_FREQ,
+            "critic_loss_aggregation": "sum_of_per_critic_mean_smooth_l1",
             "evaluation_episodes": EVAL_EPISODES,
             "num_envs": NUM_ENVS,
             "rollout_length": ROLLOUT_LENGTH,
@@ -574,6 +591,7 @@ def run_full(output_dir: Path) -> None:
         "git_commit": _git_commit(),
         "command": sys.argv,
         "jax_version": jax.__version__,
+        "matmul_precision": str(jax.config.jax_default_matmul_precision),
         "jax_backend": jax.default_backend(),
         "jax_devices": [repr(device) for device in jax.devices()],
     }
@@ -582,6 +600,7 @@ def run_full(output_dir: Path) -> None:
 
 
 def main() -> None:
+    jax.config.update("jax_default_matmul_precision", "highest")
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/key_retrain"))
     parser.add_argument("--smoke", action="store_true")

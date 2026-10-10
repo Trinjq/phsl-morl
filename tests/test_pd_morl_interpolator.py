@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from scipy.interpolate import RBFInterpolator
 from evorl.utils.pd_morl_interpolator import (
     fit_interpolator_state,
     interpolate,
@@ -10,6 +9,7 @@ from evorl.utils.pd_morl_interpolator import (
     normalize_key_solutions,
     update_key_solution,
 )
+from scipy.interpolate import RBFInterpolator
 
 KEYS = np.array([[0.0, 1.0], [0.5, 0.5], [1.0, 0.0]])
 # Synthetic deterministic fixture, not official Walker key solutions.
@@ -63,7 +63,7 @@ def test_official_walker_key_order_and_normalizations():
         np.linalg.norm(normalize_key_solutions(SOLUTIONS, "initial"), ord=2, axis=1), 1
     )
     assert np.allclose(
-        np.linalg.norm(normalize_key_solutions(SOLUTIONS, "online"), ord=2, axis=1), 1
+        np.linalg.norm(normalize_key_solutions(SOLUTIONS, "online"), ord=1, axis=1), 1
     )
     assert np.array_equal(
         normalize_key_solutions(np.zeros((1, 2)), "initial"), np.zeros((1, 2))

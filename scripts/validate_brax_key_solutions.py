@@ -1,9 +1,8 @@
-"""Validate and optionally promote a completed Brax key artifact."""
+"""Validate a completed, versioned Brax key artifact without modifying it."""
 
 import argparse
 import hashlib
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -39,6 +38,10 @@ def validate(artifact_path: Path, metadata_path: Path) -> dict:
     assert metadata["hyperparameters"]["batch_size"] == 100
     assert metadata["hyperparameters"]["replay_capacity"] == 500_000
     assert metadata["hyperparameters"]["policy_freq"] == 2
+    assert (
+        metadata["hyperparameters"].get("critic_loss_aggregation")
+        == "sum_of_per_critic_mean_smooth_l1"
+    ), "artifact was not trained with the production twin-critic loss"
     assert metadata["hyperparameters"]["evaluation_episodes"] == 10
 
     for row, per_key in zip(artifact, metadata["per_key"]):
@@ -47,6 +50,9 @@ def validate(artifact_path: Path, metadata_path: Path) -> dict:
         assert per_key["counts"]["random_action_steps"] == 25_088
         assert per_key["counts"]["critic_optimizer_step_count"] == EXPECTED_CRITIC_STEPS
         assert per_key["counts"]["actor_optimizer_step_count"] == EXPECTED_ACTOR_STEPS
+        assert np.isfinite(per_key["counts"]["last_critic_loss"])
+        assert np.isfinite(per_key["counts"]["last_actor_loss"])
+        assert per_key["counts"]["last_actor_loss"] != 0.0
         assert per_key["expected_counts"]["critic_optimizer_steps"] == EXPECTED_CRITIC_STEPS
         assert per_key["expected_counts"]["actor_optimizer_steps"] == EXPECTED_ACTOR_STEPS
         assert per_key["evaluation_history"][-1]["phase"] == "training_final"
@@ -89,18 +95,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("artifact", type=Path)
     parser.add_argument("--metadata", type=Path)
-    parser.add_argument("--promote", action="store_true")
     args = parser.parse_args()
-    metadata_path = args.metadata or args.artifact.with_name(
-        "interp_objs_walker2d_brax.metadata.json"
-    )
+    metadata_path = args.metadata or args.artifact.with_suffix(".metadata.json")
     result = validate(args.artifact, metadata_path)
-    if args.promote:
-        target = Path("configs/artifacts/interp_objs_walker2d_brax.txt")
-        target_metadata = target.with_name("interp_objs_walker2d_brax.metadata.json")
-        shutil.copyfile(args.artifact, target)
-        shutil.copyfile(metadata_path, target_metadata)
-        result["promoted_to"] = str(target)
     print(json.dumps(result, indent=2))
 
 

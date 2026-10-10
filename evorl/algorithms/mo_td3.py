@@ -1,3 +1,4 @@
+import csv
 import json
 import math
 import time
@@ -39,6 +40,11 @@ from evorl.types import (
 from evorl.utils import running_statistics
 from evorl.utils.jax_utils import tree_get
 from evorl.utils.morl_math import directional_angle, scalarize
+from evorl.utils.pd_morl_convergence import (
+    append_convergence_result,
+    plot_convergence_csv,
+    prepare_convergence_history,
+)
 from evorl.utils.pd_morl_interpolator import (
     PDMORLInterpolatorState,
     fit_interpolator_state,
@@ -48,6 +54,207 @@ from evorl.utils.pd_morl_interpolator import (
 
 from .offpolicy_utils import skip_replay_buffer_state
 from .td3 import TD3Agent, TD3NetworkParams, TD3Workflow
+
+HV_HISTORY_FIELDS = (
+    "seed",
+    "run_id",
+    "artifact_sha256",
+    "kind",
+    "preference_count",
+    "repeats",
+    "actual_env_transitions",
+    "iteration",
+    "source_hv",
+    "mean_repeat_hv",
+    "source_sparsity",
+    "source_pareto_point_count",
+    "wall_clock_seconds",
+)
+
+KEY_DIAGNOSTIC_FIELDS = (
+    "seed",
+    "run_id",
+    "artifact_sha256",
+    "iteration",
+    "actual_env_transitions",
+    "event_id",
+    "eval_cnt_ep_before",
+    "episode_count_raw_10",
+    "episode_count_logical_10",
+    "key_index",
+    "w_0",
+    "w_1",
+    "stored_r0_before",
+    "stored_r1_before",
+    "candidate_r0",
+    "candidate_r1",
+    "candidate_repeat_scores_3",
+    "stored_score",
+    "candidate_score",
+    "score_gap",
+    "relative_gap_pct",
+    "replaced",
+    "replaced_expected",
+    "stored_r0_after",
+    "stored_r1_after",
+    "evaluation_seconds",
+    "logging_seconds",
+)
+
+
+def append_key_diagnostics(path: Path, rows: list[dict[str, Any]]) -> int:
+    """Append unseen event/key rows; resume-safe without touching learner state."""
+    seen = set()
+    if path.exists():
+        with path.open(newline="", encoding="utf-8") as handle:
+            seen = {
+                (row["run_id"], int(row["event_id"]), int(row["key_index"]))
+                for row in csv.DictReader(handle)
+            }
+    rows = [
+        row
+        for row in rows
+        if (row["run_id"], row["event_id"], row["key_index"]) not in seen
+    ]
+    if not rows:
+        return 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not path.exists() or path.stat().st_size == 0
+    with path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=KEY_DIAGNOSTIC_FIELDS)
+        if write_header:
+            writer.writeheader()
+        writer.writerows(rows)
+        handle.flush()
+    return len(rows)
+
+
+def build_key_diagnostic_rows(
+    *,
+    seed: int,
+    run_id: str,
+    artifact_sha256: str,
+    iteration: int,
+    actual_env_transitions: int,
+    event_id: int,
+    eval_cnt_ep_before: int,
+    episode_count_raw: np.ndarray,
+    episode_count_logical: np.ndarray,
+    keys: np.ndarray,
+    old_solutions: np.ndarray,
+    returns_per_repeat: np.ndarray,
+    improved: np.ndarray,
+    new_solutions: np.ndarray,
+    evaluation_seconds: float,
+    logging_seconds: float,
+) -> list[dict[str, Any]]:
+    candidates = np.asarray(returns_per_repeat).mean(axis=0)
+    old = np.asarray(old_solutions)
+    new = np.asarray(new_solutions)
+    weights = np.asarray(keys, dtype=old.dtype)
+    stored_scores = np.sum(weights * old, axis=1)
+    candidate_scores = np.sum(weights * candidates, axis=1)
+    repeat_scores = np.sum(np.asarray(returns_per_repeat) * weights[None, :, :], axis=2)
+    gaps = candidate_scores - stored_scores
+    expected = gaps > 0
+    if not np.array_equal(np.asarray(improved, dtype=bool), expected):
+        raise AssertionError("diagnostic replacement decision disagrees with learner")
+    common = {
+        "seed": int(seed),
+        "run_id": run_id,
+        "artifact_sha256": artifact_sha256,
+        "iteration": int(iteration),
+        "actual_env_transitions": int(actual_env_transitions),
+        "event_id": int(event_id),
+        "eval_cnt_ep_before": int(eval_cnt_ep_before),
+        "episode_count_raw_10": json.dumps(np.asarray(episode_count_raw).tolist()),
+        "episode_count_logical_10": json.dumps(
+            np.asarray(episode_count_logical).tolist()
+        ),
+        "evaluation_seconds": float(evaluation_seconds),
+        "logging_seconds": float(logging_seconds),
+    }
+    return [
+        {
+            **common,
+            "key_index": i,
+            "w_0": float(weights[i, 0]),
+            "w_1": float(weights[i, 1]),
+            "stored_r0_before": float(old[i, 0]),
+            "stored_r1_before": float(old[i, 1]),
+            "candidate_r0": float(candidates[i, 0]),
+            "candidate_r1": float(candidates[i, 1]),
+            "candidate_repeat_scores_3": json.dumps(repeat_scores[:, i].tolist()),
+            "stored_score": float(stored_scores[i]),
+            "candidate_score": float(candidate_scores[i]),
+            "score_gap": float(gaps[i]),
+            "relative_gap_pct": float(
+                100.0 * gaps[i] / max(abs(float(stored_scores[i])), 1e-8)
+            ),
+            "replaced": bool(improved[i]),
+            "replaced_expected": bool(expected[i]),
+            "stored_r0_after": float(new[i, 0]),
+            "stored_r1_after": float(new[i, 1]),
+        }
+        for i in range(len(weights))
+    ]
+
+
+def append_hv_history(
+    path: Path,
+    *,
+    seed: int,
+    run_id: str,
+    artifact_sha256: str,
+    iteration: int,
+    actual_env_transitions: int,
+    result: Any,
+    wall_clock_seconds: float | None,
+) -> bool:
+    """Append one existing full-evaluation result, once."""
+    source_hv = float(getattr(result, "source_hv", result.mean_hv))
+    source_sparsity = float(getattr(result, "source_sparsity", result.mean_sparsity))
+    source_count = int(
+        getattr(result, "source_pareto_point_count", len(result.pareto_returns))
+    )
+    key = (run_id, "training_full", int(actual_env_transitions))
+    seen = set()
+    if path.exists():
+        with path.open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                seen.add(
+                    (
+                        row.get("run_id", ""),
+                        row.get("kind", ""),
+                        int(row["actual_env_transitions"]),
+                    )
+                )
+    if key in seen:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not path.exists() or path.stat().st_size == 0
+    row = {
+        "seed": int(seed),
+        "run_id": run_id,
+        "artifact_sha256": artifact_sha256,
+        "kind": "training_full",
+        "preference_count": len(result.preferences),
+        "repeats": int(result.returns_per_repeat.shape[0]),
+        "actual_env_transitions": int(actual_env_transitions),
+        "iteration": int(iteration),
+        "source_hv": source_hv,
+        "mean_repeat_hv": float(getattr(result, "mean_repeat_hv", result.mean_hv)),
+        "source_sparsity": source_sparsity,
+        "source_pareto_point_count": source_count,
+        "wall_clock_seconds": wall_clock_seconds,
+    }
+    with path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=HV_HISTORY_FIELDS)
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+        handle.flush()
+    return True
 
 
 def select_pessimistic_q_vector(
@@ -126,6 +333,23 @@ def parallel_actor_update_mask(
 def periodic_update_count(start: int, count: int, interval: int) -> int:
     """Count interval boundaries crossed by ``count`` consecutive updates."""
     return (start + count) // interval - start // interval
+
+
+def training_chunk_plan(
+    total_timesteps: int,
+    sampled_timesteps: int,
+    start_iteration: int,
+    transitions_per_chunk: int,
+    fold_iters: int,
+) -> tuple[int, int]:
+    """Return host chunks and the matching final rollout iteration."""
+    remaining = total_timesteps - sampled_timesteps
+    if remaining < 0:
+        raise ValueError("sampled_timesteps exceeds total_timesteps")
+    if transitions_per_chunk <= 0 or fold_iters <= 0:
+        raise ValueError("chunk size and fold_iters must be positive")
+    chunks = math.ceil(remaining / transitions_per_chunk) if remaining else 0
+    return chunks, start_iteration + chunks * fold_iters
 
 
 def select_warmup_actions(
@@ -466,6 +690,7 @@ class MOTD3Workflow(TD3Workflow):
             "interp_objs_walker2d_brax.txt",
             "interp_objs_walker2d_brax_legacy.txt",
             "interp_objs_walker2d_brax_v2.txt",
+            "interp_objs_walker2d_brax_v3.txt",
         }
         if config.env.env_type == "brax" and artifact_path.name not in brax_artifacts:
             raise ValueError(
@@ -680,8 +905,15 @@ class MOTD3Workflow(TD3Workflow):
         extra = state.agent_state.extra_state
         episode_count = self._control_episode_count(extra)
         control_metrics = {}
+        history = self.config.get("hv_history", {})
+        eval_cnt_ep_before = int(jax.device_get(extra.eval_cnt_ep))
 
-        if key_update_due(episode_count, int(jax.device_get(extra.eval_cnt_ep))):
+        if key_update_due(episode_count, eval_cnt_ep_before):
+            diagnostics_enabled = bool(
+                self.config.get("key_diagnostics", {}).get("enable", False)
+            )
+            old_key_solutions = extra.raw_key_solutions
+            raw_episode_count = extra.episode_count
             eval_cnt_ep = extra.eval_cnt_ep + jnp.uint32(1)
             self.runtime_counters["key_evaluation_count"] += 1
             self.runtime_counters["rbf_refit_count"] += 1
@@ -690,16 +922,25 @@ class MOTD3Workflow(TD3Workflow):
                     extra_state=extra.replace(eval_cnt_ep=eval_cnt_ep)
                 )
             )
+            evaluation_started_at = time.perf_counter() if diagnostics_enabled else None
             key_returns = self.morl_evaluator.evaluate_keys_device(
                 state.agent_state, repeats=3
+            )
+            if diagnostics_enabled:
+                jax.block_until_ready(key_returns)
+            evaluation_seconds = (
+                time.perf_counter() - evaluation_started_at
+                if evaluation_started_at is not None
+                else 0.0
+            )
+            keys = jnp.asarray(
+                key_preferences(self.config.reward_size),
+                dtype=extra.raw_key_solutions.dtype,
             )
             solutions, improved, interpolator = update_key_solutions_jax(
                 extra.raw_key_solutions,
                 key_returns,
-                jnp.asarray(
-                    key_preferences(self.config.reward_size),
-                    dtype=extra.raw_key_solutions.dtype,
-                ),
+                keys,
             )
             extra = state.agent_state.extra_state.replace(
                 raw_key_solutions=solutions,
@@ -714,11 +955,53 @@ class MOTD3Workflow(TD3Workflow):
                 getattr(self, "key_replacement_count", 0) + num_replacements
             )
             self.runtime_counters["key_replacement_count"] += num_replacements
+            if diagnostics_enabled:
+                logging_started_at = time.perf_counter()
+                host_values = jax.device_get(
+                    (
+                        raw_episode_count,
+                        old_key_solutions,
+                        key_returns,
+                        improved,
+                        solutions,
+                        keys,
+                    )
+                )
+                raw_counts, old, returns, host_improved, new, host_keys = host_values
+                rows = build_key_diagnostic_rows(
+                    seed=int(self.config.seed),
+                    run_id=str(
+                        self.config.get("run_id", Path(self.config.output_dir).name)
+                    ),
+                    artifact_sha256=self.interpolator_artifact.sha256,
+                    iteration=int(jax.device_get(state.metrics.iterations)),
+                    actual_env_transitions=int(
+                        jax.device_get(state.metrics.sampled_timesteps)
+                    ),
+                    event_id=eval_cnt_ep_before,
+                    eval_cnt_ep_before=eval_cnt_ep_before,
+                    episode_count_raw=raw_counts,
+                    episode_count_logical=episode_count,
+                    keys=host_keys,
+                    old_solutions=old,
+                    returns_per_repeat=returns,
+                    improved=host_improved,
+                    new_solutions=new,
+                    evaluation_seconds=evaluation_seconds,
+                    logging_seconds=time.perf_counter() - logging_started_at,
+                )
+                append_key_diagnostics(
+                    Path(self.config.output_dir) / "key_replacement_diagnostics.csv",
+                    rows,
+                )
 
         extra = state.agent_state.extra_state
-        if full_evaluation_due(
+        sampled_timesteps = int(jax.device_get(state.metrics.sampled_timesteps))
+        full_eval_due = full_evaluation_due(
             episode_count, int(jax.device_get(extra.eval_cnt)), eval_freq=100
-        ):
+        )
+
+        if full_eval_due:
             eval_cnt = extra.eval_cnt + jnp.uint32(1)
             state = state.replace(
                 agent_state=state.agent_state.replace(
@@ -728,20 +1011,119 @@ class MOTD3Workflow(TD3Workflow):
             result = self.morl_evaluator.evaluate(
                 state.agent_state, preference_grid(0.005), repeats=3
             )
+            if bool(history.get("enable", False)) and bool(
+                history.get("write_csv", True)
+            ):
+                append_hv_history(
+                    Path(self.config.output_dir) / "hv_history.csv",
+                    seed=int(self.config.seed),
+                    run_id=str(
+                        self.config.get("run_id", Path(self.config.output_dir).name)
+                    ),
+                    artifact_sha256=self.interpolator_artifact.sha256,
+                    iteration=int(jax.device_get(state.metrics.iterations)),
+                    actual_env_transitions=sampled_timesteps,
+                    result=result,
+                    wall_clock_seconds=(
+                        time.perf_counter() - self._learning_started_at
+                        if hasattr(self, "_learning_started_at")
+                        else None
+                    ),
+                )
             self._write_evaluation_snapshot(
                 "training_full",
                 result,
                 int(jax.device_get(state.metrics.iterations)),
-                sampled_timesteps=int(jax.device_get(state.metrics.sampled_timesteps)),
+                sampled_timesteps=sampled_timesteps,
             )
-            control_metrics.update(
-                {
-                    "eval/hypervolume": result.mean_hv,
-                    "eval/sparsity": result.mean_sparsity,
-                }
-            )
+            if bool(history.get("console_output", False)):
+                control_metrics.update(
+                    {
+                        "eval/hypervolume": float(
+                            getattr(result, "source_hv", result.mean_hv)
+                        ),
+                        "eval/sparsity": float(
+                            getattr(result, "source_sparsity", result.mean_sparsity)
+                        ),
+                    }
+                )
 
+        control_metrics.update(self._maybe_evaluate_convergence(state))
         return state, control_metrics
+
+    def _convergence_run_id(self) -> str:
+        configured = self.config.get("run_id")
+        if configured:
+            return str(configured)
+        path = Path(self.config.output_dir) / "hv_convergence.csv"
+        if path.exists():
+            with path.open(newline="", encoding="utf-8") as handle:
+                for row in csv.DictReader(handle):
+                    if row.get("kind") == "convergence" and row.get("run_id"):
+                        return row["run_id"]
+        return Path(self.config.output_dir).name
+
+    def _prepare_convergence_schedule(self, state: State) -> None:
+        config = self.config.get("convergence_eval", {})
+        if not bool(config.get("enable", False)):
+            return
+        interval = int(config.get("interval_transitions", 0))
+        sampled = int(jax.device_get(state.metrics.sampled_timesteps))
+        self._next_convergence_threshold = prepare_convergence_history(
+            Path(self.config.output_dir) / "hv_convergence.csv",
+            run_id=self._convergence_run_id(),
+            sampled_timesteps=sampled,
+            interval=interval,
+        )
+
+    def _maybe_evaluate_convergence(self, state: State) -> dict[str, float]:
+        config = self.config.get("convergence_eval", {})
+        if not bool(config.get("enable", False)):
+            return {}
+        interval = int(config.get("interval_transitions", 0))
+        if interval <= 0:
+            raise ValueError("convergence_eval.interval_transitions must be positive")
+        sampled = int(jax.device_get(state.metrics.sampled_timesteps))
+        target = getattr(self, "_next_convergence_threshold", None)
+        if target is None:
+            self._prepare_convergence_schedule(state)
+            target = self._next_convergence_threshold
+        if sampled < target:
+            return {}
+
+        started_at = time.perf_counter()
+        result = self.morl_evaluator.evaluate(
+            state.agent_state,
+            preference_grid(float(config.get("preference_step", 0.02))),
+            repeats=int(config.get("repeats", 3)),
+        )
+        evaluation_seconds = time.perf_counter() - started_at
+        if bool(config.get("write_csv", True)):
+            append_convergence_result(
+                Path(self.config.output_dir) / "hv_convergence.csv",
+                seed=int(self.config.seed),
+                run_id=self._convergence_run_id(),
+                artifact_sha256=self.interpolator_artifact.sha256,
+                target_transition_threshold=target,
+                actual_env_transitions=sampled,
+                iteration=int(jax.device_get(state.metrics.iterations)),
+                result=result,
+                evaluation_seconds=evaluation_seconds,
+                wall_clock_seconds=(
+                    time.perf_counter() - self._learning_started_at
+                    if hasattr(self, "_learning_started_at")
+                    else None
+                ),
+            )
+        self._next_convergence_threshold = (sampled // interval + 1) * interval
+        if not bool(config.get("console_output", False)):
+            return {}
+        return {
+            "convergence/source_hv": float(
+                getattr(result, "source_hv", result.mean_hv)
+            ),
+            "convergence/evaluation_seconds": evaluation_seconds,
+        }
 
     def _observe_diagnostics(self, iteration, train_metrics, state):
         """Write periodic formal-run diagnostics without touching learner state."""
@@ -843,6 +1225,7 @@ class MOTD3Workflow(TD3Workflow):
             "kind": kind,
             "iteration": int(iteration),
             "environment_transitions": sampled_timesteps,
+            "actual_env_transitions": sampled_timesteps,
             "wall_clock_seconds": (
                 time.perf_counter() - self._learning_started_at
                 if hasattr(self, "_learning_started_at")
@@ -924,37 +1307,87 @@ class MOTD3Workflow(TD3Workflow):
 
     def _after_learning(self, state: State):
         """Run the source training-final 1001-preference, three-repeat evaluation."""
+        iterations = int(jax.device_get(state.metrics.iterations))
+        if bool(self.config.get("checkpoint", {}).get("enable", False)):
+            saved_state = state
+            if (
+                hasattr(self.config, "save_replay_buffer")
+                and not self.config.save_replay_buffer
+            ):
+                saved_state = skip_replay_buffer_state(saved_state)
+            if self.checkpoint_manager.latest_step() != iterations:
+                self.checkpoint_manager.save(iterations, saved_state, force=True)
+            self.checkpoint_manager.wait_until_finished()
+
         if getattr(self.config, "run_final_evaluation", True):
             result = self.morl_evaluator.evaluate(
                 state.agent_state, preference_grid(0.001), repeats=3
             )
-            iterations = int(jax.device_get(state.metrics.iterations))
             self._write_evaluation_snapshot(
                 "training_final",
                 result,
                 iterations,
                 sampled_timesteps=int(jax.device_get(state.metrics.sampled_timesteps)),
             )
-            self.recorder.write(
-                {
-                    "eval/final_hypervolume": result.mean_hv,
-                    "eval/final_sparsity": result.mean_sparsity,
-                    "eval/final_pareto_point_count": len(result.pareto_returns),
-                },
-                iterations,
-            )
-        else:
-            iterations = int(jax.device_get(state.metrics.iterations))
-
-        saved_state = state
-        if (
-            hasattr(self.config, "save_replay_buffer")
-            and not self.config.save_replay_buffer
+            if bool(self.config.get("hv_history", {}).get("console_output", False)):
+                self.recorder.write(
+                    {
+                        "eval/final_hypervolume": float(
+                            getattr(result, "source_hv", result.mean_hv)
+                        ),
+                        "eval/final_sparsity": float(
+                            getattr(result, "source_sparsity", result.mean_sparsity)
+                        ),
+                        "eval/final_pareto_point_count": int(
+                            getattr(
+                                result,
+                                "source_pareto_point_count",
+                                len(result.pareto_returns),
+                            )
+                        ),
+                    },
+                    iterations,
+                )
+        history = self.config.get("hv_history", {})
+        if bool(history.get("enable", False)) and bool(
+            history.get("plot_on_finish", True)
         ):
-            saved_state = skip_replay_buffer_state(saved_state)
-        if self.checkpoint_manager.latest_step() != iterations:
-            self.checkpoint_manager.save(iterations, saved_state, force=True)
-        self.checkpoint_manager.wait_until_finished()
+            csv_path = Path(self.config.output_dir) / "hv_history.csv"
+            if csv_path.exists():
+                import subprocess
+                import sys
+
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(
+                            Path(__file__).parents[2] / "scripts" / "plot_pd_morl_hv.py"
+                        ),
+                        "--input",
+                        str(csv_path),
+                        "--output",
+                        str(Path(self.config.output_dir) / "hv_curve.png"),
+                    ],
+                    check=True,
+                    cwd=Path(__file__).parents[2],
+                )
+
+        convergence = self.config.get("convergence_eval", {})
+        convergence_csv = Path(self.config.output_dir) / "hv_convergence.csv"
+        if (
+            bool(convergence.get("enable", False))
+            and bool(convergence.get("plot_on_finish", True))
+        ):
+            try:
+                plot_convergence_csv(
+                    convergence_csv,
+                    Path(self.config.output_dir) / "hv_convergence.png",
+                )
+            except Exception as error:  # noqa: BLE001 - post-processing is noncritical
+                (
+                    Path(self.config.output_dir) / "hv_convergence_plot_error.log"
+                ).write_text(f"{type(error).__name__}: {error}\n", encoding="utf-8")
+
         return state
 
     def _parallel_actor_update_mask(self, state):
@@ -975,21 +1408,27 @@ class MOTD3Workflow(TD3Workflow):
 
     def learn(self, state: State) -> State:
         self._learning_started_at = time.perf_counter()
+        self.runtime_timing["host_chunk_time"] = 0.0
+        self._prepare_convergence_schedule(state)
         num_devices = jax.device_count()
         one_step_timesteps = self.config.rollout_length * self.config.num_envs
-        sampled_timesteps = state.metrics.sampled_timesteps.tolist()
-        num_iters = math.ceil(
-            (self.config.total_timesteps - sampled_timesteps)
-            / (one_step_timesteps * self.config.fold_iters * num_devices)
-        )
-        start_iteration = state.metrics.iterations.tolist()
-        final_iteration = num_iters + start_iteration
-
+        sampled_timesteps = int(jax.device_get(state.metrics.sampled_timesteps))
+        start_iteration = int(jax.device_get(state.metrics.iterations))
         fold_iters = int(self.config.fold_iters)
+        transitions_per_chunk = one_step_timesteps * fold_iters * num_devices
+        num_chunks, final_iteration = training_chunk_plan(
+            int(self.config.total_timesteps),
+            sampled_timesteps,
+            start_iteration,
+            transitions_per_chunk,
+            fold_iters,
+        )
+
         critic_per_rollout = int(self._critic_updates_per_rollout())
         actor_update_interval = int(self.config.actor_update_interval)
 
-        for i in range(num_iters):
+        for chunk_index in range(num_chunks):
+            is_last_chunk = chunk_index == num_chunks - 1
             self.runtime_counters["host_chunk_count"] += 1
             chunk_started_at = time.perf_counter()
             train_metrics, state = self._multi_steps(state)
@@ -1021,7 +1460,7 @@ class MOTD3Workflow(TD3Workflow):
             iterations = state.metrics.iterations.tolist()
             if (
                 iterations % int(self.config.get("log_interval", 1)) == 0
-                or iterations == final_iteration
+                or is_last_chunk
             ):
                 train_metrics_dict = train_metrics.to_local_dict()
                 workflow_metrics_dict = workflow_metrics.to_local_dict()
@@ -1043,12 +1482,19 @@ class MOTD3Workflow(TD3Workflow):
                     add_prefix(eval_metrics.to_local_dict(), "eval"), iterations
                 )
 
-            saved_state = state
-            if not self.config.save_replay_buffer:
-                saved_state = skip_replay_buffer_state(saved_state)
-            self.checkpoint_manager.save(
-                iterations, saved_state, force=iterations == final_iteration
-            )
+            if bool(self.config.get("checkpoint", {}).get("enable", False)):
+                saved_state = state
+                if not self.config.save_replay_buffer:
+                    saved_state = skip_replay_buffer_state(saved_state)
+                self.checkpoint_manager.save(
+                    iterations, saved_state, force=is_last_chunk
+                )
+
+        state = self._after_learning(state)
+        session_transitions = int(
+            jax.device_get(state.metrics.sampled_timesteps)
+        ) - sampled_timesteps
+        session_seconds = self.runtime_timing["host_chunk_time"]
 
         summary_path = Path(self.config.output_dir) / "counters_summary.json"
         summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1056,23 +1502,14 @@ class MOTD3Workflow(TD3Workflow):
             **self.runtime_counters,
             "timing": {
                 **self.runtime_timing,
-                "transitions_per_host_chunk": int(
-                    self.config.num_envs
-                    * self.config.rollout_length
-                    * self.config.fold_iters
-                ),
-                "total_measured_transitions": int(
-                    self.runtime_counters["host_chunk_count"]
-                    * self.config.num_envs
-                    * self.config.rollout_length
-                    * self.config.fold_iters
-                ),
+                "transitions_per_host_chunk": transitions_per_chunk,
+                "session_host_chunk_count": num_chunks,
+                "session_train_transitions": session_transitions,
+                "total_measured_transitions": session_transitions,
                 "steady_state_transitions_per_second": (
-                    self.runtime_counters["host_chunk_count"]
-                    * self.config.num_envs
-                    * self.config.rollout_length
-                    * self.config.fold_iters
-                    / self.runtime_timing["host_chunk_time"]
+                    session_transitions / session_seconds
+                    if session_seconds > 0
+                    else None
                 ),
             },
             "derived_verification": {
@@ -1089,7 +1526,7 @@ class MOTD3Workflow(TD3Workflow):
         }
         summary_path.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
 
-        return self._after_learning(state)
+        return state
 
 
 class PDMORLGPUWorkflow(MOTD3Workflow):
@@ -1271,6 +1708,4 @@ class PDMORLGPUWorkflow(MOTD3Workflow):
         return int(self.config.her_start_base_transitions)
 
     def _after_learning(self, state: State):
-        if self.config.get("run_final_evaluation", True):
-            return super()._after_learning(state)
-        return state
+        return super()._after_learning(state)

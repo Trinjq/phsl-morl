@@ -1,3 +1,4 @@
+import csv
 import hashlib
 import importlib.metadata
 import json
@@ -10,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import hydra
+import numpy as np
 from hydra_utils import (
     get_output_dir,
     set_absl_log_level,
@@ -158,6 +160,140 @@ def _source_fingerprint():
         digest.update(file.relative_to(root).as_posix().encode())
         digest.update(file.read_bytes())
     return digest.hexdigest()
+
+
+def _resolve_resume_checkpoint(config: DictConfig) -> Path | None:
+    raw = config.get("resume_from_checkpoint")
+    if raw:
+        path = Path(str(raw)).expanduser()
+    elif config.get("resume_latest", False):
+        path = Path(config.output_dir) / "checkpoints"
+    else:
+        return None
+    if path.name.isdigit() and path.is_dir():
+        return path
+    if not bool(config.get("resume_latest", False)):
+        raise ValueError(
+            "resume_from_checkpoint must name a checkpoint step, or set resume_latest=true"
+        )
+    candidates = [
+        child for child in path.iterdir() if child.is_dir() and child.name.isdigit()
+    ]
+    if not candidates:
+        raise FileNotFoundError(f"no checkpoint steps found in {path}")
+    return max(candidates, key=lambda child: int(child.name))
+
+
+def _copy_history_to_resume_point(
+    source: Path, target: Path, sampled_timesteps: int
+) -> None:
+    if not source.exists() or source.stat().st_size == 0:
+        return
+    with source.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames
+        if not fieldnames or "actual_env_transitions" not in fieldnames:
+            raise ValueError(f"history has no actual_env_transitions: {source}")
+        rows = list(reader)
+    try:
+        kept = [
+            row
+            for row in rows
+            if int(row["actual_env_transitions"]) <= sampled_timesteps
+        ]
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(f"invalid history transition in {source}") from error
+
+    if source.resolve() == target.resolve():
+        if len(kept) != len(rows):
+            raise ValueError(
+                "resuming an older checkpoint requires a new output_dir; "
+                f"history contains rows after {sampled_timesteps}"
+            )
+        return
+    if target.exists():
+        raise FileExistsError(f"resume target history already exists: {target}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(kept)
+
+
+def _restore_checkpoint(config, workflow, state, metadata):
+    checkpoint_path = _resolve_resume_checkpoint(config)
+    if checkpoint_path is None:
+        return state
+    if not bool(config.get("save_replay_buffer", False)):
+        raise ValueError(
+            "resume requires save_replay_buffer=true; incomplete checkpoints are rejected"
+        )
+    output_root = checkpoint_path.parent.parent
+    saved_metadata_path = output_root / "run_metadata.json"
+    if saved_metadata_path.exists() and metadata:
+        saved_metadata = json.loads(saved_metadata_path.read_text(encoding="utf-8"))
+        saved_sha = saved_metadata.get("key_artifact_sha256")
+        current_sha = metadata.get("key_artifact_sha256")
+        if saved_sha and current_sha and saved_sha != current_sha:
+            raise ValueError(
+                f"checkpoint Artifact SHA mismatch: saved={saved_sha} current={current_sha}"
+            )
+    from evorl.utils.orbax_utils import load
+
+    restored = load(str(checkpoint_path), state)
+    sampled = int(restored.metrics.sampled_timesteps)
+    if sampled <= 0:
+        raise ValueError("checkpoint has no sampled transitions")
+    for name in ("hv_history.csv", "hv_convergence.csv"):
+        _copy_history_to_resume_point(
+            output_root / name, Path(config.output_dir) / name, sampled
+        )
+    if hasattr(workflow, "runtime_counters"):
+        extra = restored.agent_state.extra_state
+        critic_steps = int(extra.total_it)
+        iterations = int(restored.metrics.iterations)
+        fold_iters = int(config.fold_iters)
+        if fold_iters <= 0 or iterations % fold_iters:
+            raise ValueError(
+                "checkpoint iterations are not aligned to complete host chunks"
+            )
+        actor_steps = critic_steps // int(config.actor_update_interval)
+        workflow.runtime_counters.update(
+            {
+                "host_chunk_count": iterations // fold_iters,
+                "inner_rollout_count": iterations,
+                "environment_step_count": sampled,
+                "critic_optimizer_step_count": critic_steps,
+                "actor_optimizer_step_count": actor_steps,
+                "target_update_count": actor_steps,
+                "replay_sample_call_count": critic_steps,
+                "key_evaluation_count": max(int(extra.eval_cnt_ep) - 1, 0),
+                "rbf_refit_count": max(int(extra.eval_cnt_ep) - 1, 0),
+            }
+        )
+        diagnostics_path = output_root / "training_diagnostics.jsonl"
+        if diagnostics_path.exists():
+            rows = [
+                json.loads(line)
+                for line in diagnostics_path.read_text(encoding="utf-8").splitlines()
+                if line
+            ]
+            eligible = [
+                row
+                for row in rows
+                if (
+                    int(row.get("base_inserts", sampled + 1)) <= sampled
+                    if "base_inserts" in row
+                    else int(row.get("iteration", iterations + 1)) <= iterations
+                )
+            ]
+            if eligible:
+                workflow.runtime_counters["key_replacement_count"] = int(
+                    eligible[-1].get("key_replacement_count", 0)
+                )
+    if metadata:
+        metadata["resumed_from_checkpoint"] = str(checkpoint_path)
+    return restored
 
 
 def setup_recorders(config: DictConfig, workflow_name: str):
@@ -487,7 +623,12 @@ def _finish_formal_run(config, workflow, state, metadata, started_at):
     if latest_step is None:
         raise RuntimeError("final checkpoint is missing")
     before_actions = _deterministic_probe(workflow, state)
-    restored = workflow.checkpoint_manager.restore(latest_step, state)
+    restore_state = state
+    if not bool(config.get("save_replay_buffer", False)):
+        from evorl.algorithms.offpolicy_utils import skip_replay_buffer_state
+
+        restore_state = skip_replay_buffer_state(state)
+    restored = workflow.checkpoint_manager.restore(latest_step, restore_state)
     after_actions = _deterministic_probe(workflow, restored)
     restore_checks = {
         "actor_outputs": np.array_equal(before_actions, after_actions),
@@ -668,9 +809,11 @@ def train(config: DictConfig) -> None:
                 else "source-faithful PD-MORL reproduction with Brax environment adaptation"
             ),
             "interpolator_backend": "jax",
-            "key_objective_normalization": "l2",
+            "key_objective_normalization": {"initial": "l2", "online": "l1"},
             "key_artifact_path": str(artifact_path.resolve()),
-            "key_artifact_sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+            "key_artifact_sha256": hashlib.sha256(
+                artifact_path.read_bytes().replace(b"\r\n", b"\n")
+            ).hexdigest(),
             "git_commit": git_commit,
             "runtime_source_sha256": _source_fingerprint(),
             "date_utc": datetime.now(timezone.utc).isoformat(),
@@ -705,6 +848,7 @@ def train(config: DictConfig) -> None:
     try:
         state = workflow.init(jax.random.PRNGKey(config.seed))
         if is_pd_morl:
+            state = _restore_checkpoint(config, workflow, state, metadata)
             import jax.tree_util as jtu
 
             digest = hashlib.sha256()

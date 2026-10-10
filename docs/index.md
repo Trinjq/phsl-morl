@@ -1,3 +1,5 @@
+> PD-MORL 项目入口：[当前基线协议与运行链路](PD_MORL_REPRODUCTION_PROTOCOL.md)。旧阶段报告按历史记录保留。
+
 # Welcome to EvoRL!
 
 ```{toctree}

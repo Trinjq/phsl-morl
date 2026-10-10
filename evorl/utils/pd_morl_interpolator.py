@@ -41,7 +41,9 @@ def normalize_key_solutions(
     solutions = jnp.asarray(key_solutions)
     if solutions.ndim != 2:
         raise ValueError("key_solutions must have shape [K, L]")
-    norms = jnp.linalg.norm(solutions, ord=2, axis=1, keepdims=True)
+    norms = jnp.linalg.norm(
+        solutions, ord=2 if normalization == "initial" else 1, axis=1, keepdims=True
+    )
     return solutions / jnp.where(norms > 0, norms, 1)
 
 

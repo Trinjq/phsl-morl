@@ -1,4 +1,4 @@
-from hashlib import sha256
+import json
 from pathlib import Path
 
 import jax
@@ -51,13 +51,39 @@ def test_initial_artifact_preference_order(tmp_path):
 
 
 def test_brax_artifact_provenance():
-    path = Path("configs/artifacts/interp_objs_walker2d_brax.txt")
+    path = Path("configs/artifacts/interp_objs_walker2d_brax_v3.txt")
+    metadata = json.loads(
+        path.with_name("interp_objs_walker2d_brax_v3.metadata.json").read_text(
+            encoding="utf-8"
+        )
+    )
     values, provenance = load_key_solution_artifact(path, KEYS)
     assert values.shape == (3, 2)
     assert provenance.shape == (3, 2)
     assert provenance.key_preferences == KEYS.tolist()
-    assert provenance.sha256 == sha256(path.read_bytes()).hexdigest()
+    assert provenance.sha256 == metadata["artifact_sha256"]
     assert np.isfinite(values).all()
+
+
+def test_pd_morl_configs_use_one_verified_brax_artifact():
+    from hydra import compose, initialize_config_dir
+
+    with initialize_config_dir(
+        version_base=None,
+        config_dir=str((Path(__file__).parents[1] / "configs").resolve()),
+    ):
+        configs = [
+            compose(config_name=f"experiment/{name}")
+            for name in (
+                "pd_morl",
+                "pd_morl_key_replacement_diagnostics",
+                "pd_morl_brax_reference",
+            )
+        ]
+
+    expected = "configs/artifacts/interp_objs_walker2d_brax_v3.txt"
+    assert {config.interp_artifact_path for config in configs} == {expected}
+    assert "interpolator_artifact" not in configs[-1]
 
 
 def test_brax_run_rejects_mujoco_key_artifact():
@@ -113,12 +139,12 @@ def test_replacement_is_direct_assignment_and_no_ema():
     np.testing.assert_array_equal(updated, candidate)
 
 
-def test_online_refit_uses_l2():
+def test_online_refit_uses_l1():
     old = np.array([[1.0, 2.0], [2.0, 2.0], [3.0, 1.0]])
     updated, _, state = update_key_solutions(old, np.stack((old, old)), KEYS)
     np.testing.assert_allclose(
         state.normalized_key_solutions,
-        updated / np.linalg.norm(updated, ord=2, axis=1, keepdims=True),
+        updated / np.linalg.norm(updated, ord=1, axis=1, keepdims=True),
         rtol=0,
         atol=2e-5,
     )
@@ -133,7 +159,7 @@ def test_jitted_online_update_averages_repeats_and_refits():
     np.testing.assert_array_equal(improved, [True, True, True])
     np.testing.assert_allclose(
         state.normalized_key_solutions,
-        expected / np.linalg.norm(expected, axis=1, keepdims=True),
+        expected / np.linalg.norm(expected, ord=1, axis=1, keepdims=True),
         atol=2e-5,
     )
 
