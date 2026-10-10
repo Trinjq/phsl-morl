@@ -2,9 +2,9 @@
 
 ## Outcome
 
-The refreshed three-key Walker2d Brax artifact was trained and validated on lab4090, promoted to the repository default path, and compared against the previous artifact with two matched 2M-step runs per artifact.
+The refreshed three-key Walker2d Brax artifact was trained and compared against the previous artifact with two matched 2M-step runs per artifact. A post-promotion code audit found that its trainer averaged the two critic losses instead of summing them as the production workflow does, so the promotion has been withdrawn pending regeneration with the corrected trainer.
 
-The promoted artifact is:
+The withdrawn artifact is retained for provenance at:
 
 configs/artifacts/interp_objs_walker2d_brax.txt
 
@@ -12,7 +12,7 @@ SHA-256:
 
 cfdff6643b70591670080f1c80fa9a146c1d60576e1cca57813c1ed84ff843f2
 
-The legacy _v2 artifact was not modified.
+The corrected refresh is now promoted as configs/artifacts/interp_objs_walker2d_brax_v3.txt (SHA-256 e8bce224c1b767d1588bde14a3560933a4f74262acd3982f2bd26889d79d3c93). The previous v2 artifact remains available as the historical active baseline.
 
 ## Provenance
 
@@ -26,7 +26,7 @@ The legacy _v2 artifact was not modified.
 
 Candidate validation returned success for finite initial and online interpolation checks, artifact metadata, key ordering, endpoint/midpoint geometry, and JAX/SciPy interpolation agreement. The validator emitted CUDA preallocation and optional warp import warnings, but exited successfully.
 
-## Promoted key solutions
+## Withdrawn candidate key solutions
 
 Keys are ordered as [0, 1], [0.5, 0.5], and [1, 0].
 
@@ -49,7 +49,7 @@ The training command requested total_timesteps=2,000,960. The authoritative coun
 | Refreshed | 0 | 7,189,660.59 | 240 | 2,709.13 | (2,716.76, 1,880.27) | 67 / 67 / 0 | 2,000,960 |
 | Refreshed | 1 | 6,089,595.55 | 113 | 690.77 | (1,066.87, 840.02) | 71 / 71 / 0 | 2,000,960 |
 
-Across the two seeds, mean hypervolume changed from 6,442,698.05 to 6,639,628.07 (+3.06%), and mean Pareto count changed from 160.5 to 176.5. Mean sparsity changed from 2,915.69 to 1,699.95. The improvement is not uniform across every seed and metric: refreshed seed 0 improved hypervolume and Pareto count but had higher sparsity, while refreshed seed 1 improved hypervolume and sparsity but had fewer Pareto points. With two seeds, this supports adopting the refreshed artifact as the default provenance update, not a claim of universal performance dominance.
+Across the two seeds, mean hypervolume changed from 6,442,698.05 to 6,639,628.07 (+3.06%), and mean Pareto count changed from 160.5 to 176.5. Mean sparsity changed from 2,915.69 to 1,699.95. The improvement is not uniform across every seed and metric: refreshed seed 0 improved hypervolume and Pareto count but had higher sparsity, while refreshed seed 1 improved hypervolume and sparsity but had fewer Pareto points. Because the candidate was trained with the wrong critic-loss reduction, these runs are historical observations and do not support promotion.
 
 End-to-final-evaluation elapsed times were 2,528.3 s and 2,548.5 s for legacy seeds 0/1, and 2,550.8 s and 2,508.6 s for refreshed seeds 0/1. The first logged iteration-12 times, used as a compile/warm-up proxy, were 241.8 s, 241.7 s, 240.7 s, and 237.0 s in the same order. These are run-level observations on the lab4090 GPU, not a controlled speedup claim.
 
@@ -75,4 +75,22 @@ An initial refreshed seed-0 launch used a relative artifact path and resolved to
 - Smoke run completed on the GPU path
 - Candidate validator: successful
 - Legacy and refreshed seed 0/1 runs: completed normally
-- Default artifact SHA after promotion: verified as cfdff6643b70591670080f1c80fa9a146c1d60576e1cca57813c1ed84ff843f2
+- Withdrawn artifact SHA: verified as cfdff6643b70591670080f1c80fa9a146c1d60576e1cca57813c1ed84ff843f2
+- Default artifact restored to the `_v2` artifact pending corrected retraining
+
+## Corrected v3 promotion
+
+The corrected trainer was run on the remote lab4090 GPU 0 in
+outputs/key_fix_full. All three keys completed with:
+
+- 2,000,128 actual environment steps and 25,088 random-action steps each;
+- 1,999,929 Critic and 999,964 Actor optimizer steps each;
+- sum_of_per_critic_mean_smooth_l1 loss aggregation;
+- finite final losses and nonzero Actor loss;
+- GPU JAX execution and successful JAX/SciPy interpolation validation.
+
+Candidate SHA-256:
+e8bce224c1b767d1588bde14a3560933a4f74262acd3982f2bd26889d79d3c93.
+
+The v3 copy and metadata are versioned in configs/artifacts/; no historical
+artifact was overwritten.

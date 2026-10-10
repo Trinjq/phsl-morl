@@ -11,4 +11,13 @@ checkpoint:
   save_interval_steps: 100
   max_to_keep: null
 output_dir: ''
+resume_from_checkpoint: null
+resume_latest: false
+hv_history:
+  enable: false
+  write_csv: true
+  plot_on_finish: true
+  console_output: false
+convergence_eval:
+  enable: false
 recorders: [log, wandb]

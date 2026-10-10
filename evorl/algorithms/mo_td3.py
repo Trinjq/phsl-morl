@@ -1,3 +1,4 @@
+import csv
 import json
 import math
 import time
@@ -39,6 +40,11 @@ from evorl.types import (
 from evorl.utils import running_statistics
 from evorl.utils.jax_utils import tree_get
 from evorl.utils.morl_math import directional_angle, scalarize
+from evorl.utils.pd_morl_convergence import (
+    append_convergence_result,
+    plot_convergence_csv,
+    prepare_convergence_history,
+)
 from evorl.utils.pd_morl_interpolator import (
     PDMORLInterpolatorState,
     fit_interpolator_state,
@@ -48,6 +54,79 @@ from evorl.utils.pd_morl_interpolator import (
 
 from .offpolicy_utils import skip_replay_buffer_state
 from .td3 import TD3Agent, TD3NetworkParams, TD3Workflow
+
+HV_HISTORY_FIELDS = (
+    "seed",
+    "run_id",
+    "artifact_sha256",
+    "kind",
+    "preference_count",
+    "repeats",
+    "actual_env_transitions",
+    "iteration",
+    "source_hv",
+    "mean_repeat_hv",
+    "source_sparsity",
+    "source_pareto_point_count",
+    "wall_clock_seconds",
+)
+
+
+def append_hv_history(
+    path: Path,
+    *,
+    seed: int,
+    run_id: str,
+    artifact_sha256: str,
+    iteration: int,
+    actual_env_transitions: int,
+    result: Any,
+    wall_clock_seconds: float | None,
+) -> bool:
+    """Append one existing full-evaluation result, once."""
+    source_hv = float(getattr(result, "source_hv", result.mean_hv))
+    source_sparsity = float(getattr(result, "source_sparsity", result.mean_sparsity))
+    source_count = int(
+        getattr(result, "source_pareto_point_count", len(result.pareto_returns))
+    )
+    key = (run_id, "training_full", int(actual_env_transitions))
+    seen = set()
+    if path.exists():
+        with path.open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                seen.add(
+                    (
+                        row.get("run_id", ""),
+                        row.get("kind", ""),
+                        int(row["actual_env_transitions"]),
+                    )
+                )
+    if key in seen:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not path.exists() or path.stat().st_size == 0
+    row = {
+        "seed": int(seed),
+        "run_id": run_id,
+        "artifact_sha256": artifact_sha256,
+        "kind": "training_full",
+        "preference_count": len(result.preferences),
+        "repeats": int(result.returns_per_repeat.shape[0]),
+        "actual_env_transitions": int(actual_env_transitions),
+        "iteration": int(iteration),
+        "source_hv": source_hv,
+        "mean_repeat_hv": float(getattr(result, "mean_repeat_hv", result.mean_hv)),
+        "source_sparsity": source_sparsity,
+        "source_pareto_point_count": source_count,
+        "wall_clock_seconds": wall_clock_seconds,
+    }
+    with path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=HV_HISTORY_FIELDS)
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+        handle.flush()
+    return True
 
 
 def select_pessimistic_q_vector(
@@ -466,6 +545,7 @@ class MOTD3Workflow(TD3Workflow):
             "interp_objs_walker2d_brax.txt",
             "interp_objs_walker2d_brax_legacy.txt",
             "interp_objs_walker2d_brax_v2.txt",
+            "interp_objs_walker2d_brax_v3.txt",
         }
         if config.env.env_type == "brax" and artifact_path.name not in brax_artifacts:
             raise ValueError(
@@ -680,6 +760,7 @@ class MOTD3Workflow(TD3Workflow):
         extra = state.agent_state.extra_state
         episode_count = self._control_episode_count(extra)
         control_metrics = {}
+        history = self.config.get("hv_history", {})
 
         if key_update_due(episode_count, int(jax.device_get(extra.eval_cnt_ep))):
             eval_cnt_ep = extra.eval_cnt_ep + jnp.uint32(1)
@@ -716,9 +797,12 @@ class MOTD3Workflow(TD3Workflow):
             self.runtime_counters["key_replacement_count"] += num_replacements
 
         extra = state.agent_state.extra_state
-        if full_evaluation_due(
+        sampled_timesteps = int(jax.device_get(state.metrics.sampled_timesteps))
+        full_eval_due = full_evaluation_due(
             episode_count, int(jax.device_get(extra.eval_cnt)), eval_freq=100
-        ):
+        )
+
+        if full_eval_due:
             eval_cnt = extra.eval_cnt + jnp.uint32(1)
             state = state.replace(
                 agent_state=state.agent_state.replace(
@@ -728,20 +812,119 @@ class MOTD3Workflow(TD3Workflow):
             result = self.morl_evaluator.evaluate(
                 state.agent_state, preference_grid(0.005), repeats=3
             )
+            if bool(history.get("enable", False)) and bool(
+                history.get("write_csv", True)
+            ):
+                append_hv_history(
+                    Path(self.config.output_dir) / "hv_history.csv",
+                    seed=int(self.config.seed),
+                    run_id=str(
+                        self.config.get("run_id", Path(self.config.output_dir).name)
+                    ),
+                    artifact_sha256=self.interpolator_artifact.sha256,
+                    iteration=int(jax.device_get(state.metrics.iterations)),
+                    actual_env_transitions=sampled_timesteps,
+                    result=result,
+                    wall_clock_seconds=(
+                        time.perf_counter() - self._learning_started_at
+                        if hasattr(self, "_learning_started_at")
+                        else None
+                    ),
+                )
             self._write_evaluation_snapshot(
                 "training_full",
                 result,
                 int(jax.device_get(state.metrics.iterations)),
-                sampled_timesteps=int(jax.device_get(state.metrics.sampled_timesteps)),
+                sampled_timesteps=sampled_timesteps,
             )
-            control_metrics.update(
-                {
-                    "eval/hypervolume": result.mean_hv,
-                    "eval/sparsity": result.mean_sparsity,
-                }
-            )
+            if bool(history.get("console_output", False)):
+                control_metrics.update(
+                    {
+                        "eval/hypervolume": float(
+                            getattr(result, "source_hv", result.mean_hv)
+                        ),
+                        "eval/sparsity": float(
+                            getattr(result, "source_sparsity", result.mean_sparsity)
+                        ),
+                    }
+                )
 
+        control_metrics.update(self._maybe_evaluate_convergence(state))
         return state, control_metrics
+
+    def _convergence_run_id(self) -> str:
+        configured = self.config.get("run_id")
+        if configured:
+            return str(configured)
+        path = Path(self.config.output_dir) / "hv_convergence.csv"
+        if path.exists():
+            with path.open(newline="", encoding="utf-8") as handle:
+                for row in csv.DictReader(handle):
+                    if row.get("kind") == "convergence" and row.get("run_id"):
+                        return row["run_id"]
+        return Path(self.config.output_dir).name
+
+    def _prepare_convergence_schedule(self, state: State) -> None:
+        config = self.config.get("convergence_eval", {})
+        if not bool(config.get("enable", False)):
+            return
+        interval = int(config.get("interval_transitions", 0))
+        sampled = int(jax.device_get(state.metrics.sampled_timesteps))
+        self._next_convergence_threshold = prepare_convergence_history(
+            Path(self.config.output_dir) / "hv_convergence.csv",
+            run_id=self._convergence_run_id(),
+            sampled_timesteps=sampled,
+            interval=interval,
+        )
+
+    def _maybe_evaluate_convergence(self, state: State) -> dict[str, float]:
+        config = self.config.get("convergence_eval", {})
+        if not bool(config.get("enable", False)):
+            return {}
+        interval = int(config.get("interval_transitions", 0))
+        if interval <= 0:
+            raise ValueError("convergence_eval.interval_transitions must be positive")
+        sampled = int(jax.device_get(state.metrics.sampled_timesteps))
+        target = getattr(self, "_next_convergence_threshold", None)
+        if target is None:
+            self._prepare_convergence_schedule(state)
+            target = self._next_convergence_threshold
+        if sampled < target:
+            return {}
+
+        started_at = time.perf_counter()
+        result = self.morl_evaluator.evaluate(
+            state.agent_state,
+            preference_grid(float(config.get("preference_step", 0.02))),
+            repeats=int(config.get("repeats", 3)),
+        )
+        evaluation_seconds = time.perf_counter() - started_at
+        if bool(config.get("write_csv", True)):
+            append_convergence_result(
+                Path(self.config.output_dir) / "hv_convergence.csv",
+                seed=int(self.config.seed),
+                run_id=self._convergence_run_id(),
+                artifact_sha256=self.interpolator_artifact.sha256,
+                target_transition_threshold=target,
+                actual_env_transitions=sampled,
+                iteration=int(jax.device_get(state.metrics.iterations)),
+                result=result,
+                evaluation_seconds=evaluation_seconds,
+                wall_clock_seconds=(
+                    time.perf_counter() - self._learning_started_at
+                    if hasattr(self, "_learning_started_at")
+                    else None
+                ),
+            )
+        self._next_convergence_threshold = (sampled // interval + 1) * interval
+        if not bool(config.get("console_output", False)):
+            return {}
+        return {
+            "convergence/source_hv": float(
+                getattr(result, "source_hv", result.mean_hv)
+            ),
+            "convergence/evaluation_seconds": evaluation_seconds,
+        }
 
     def _observe_diagnostics(self, iteration, train_metrics, state):
         """Write periodic formal-run diagnostics without touching learner state."""
@@ -843,6 +1026,7 @@ class MOTD3Workflow(TD3Workflow):
             "kind": kind,
             "iteration": int(iteration),
             "environment_transitions": sampled_timesteps,
+            "actual_env_transitions": sampled_timesteps,
             "wall_clock_seconds": (
                 time.perf_counter() - self._learning_started_at
                 if hasattr(self, "_learning_started_at")
@@ -935,16 +1119,67 @@ class MOTD3Workflow(TD3Workflow):
                 iterations,
                 sampled_timesteps=int(jax.device_get(state.metrics.sampled_timesteps)),
             )
-            self.recorder.write(
-                {
-                    "eval/final_hypervolume": result.mean_hv,
-                    "eval/final_sparsity": result.mean_sparsity,
-                    "eval/final_pareto_point_count": len(result.pareto_returns),
-                },
-                iterations,
-            )
+            if bool(self.config.get("hv_history", {}).get("console_output", False)):
+                self.recorder.write(
+                    {
+                        "eval/final_hypervolume": float(
+                            getattr(result, "source_hv", result.mean_hv)
+                        ),
+                        "eval/final_sparsity": float(
+                            getattr(result, "source_sparsity", result.mean_sparsity)
+                        ),
+                        "eval/final_pareto_point_count": int(
+                            getattr(
+                                result,
+                                "source_pareto_point_count",
+                                len(result.pareto_returns),
+                            )
+                        ),
+                    },
+                    iterations,
+                )
         else:
             iterations = int(jax.device_get(state.metrics.iterations))
+
+        history = self.config.get("hv_history", {})
+        if bool(history.get("enable", False)) and bool(
+            history.get("plot_on_finish", True)
+        ):
+            csv_path = Path(self.config.output_dir) / "hv_history.csv"
+            if csv_path.exists():
+                import subprocess
+                import sys
+
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(
+                            Path(__file__).parents[2] / "scripts" / "plot_pd_morl_hv.py"
+                        ),
+                        "--input",
+                        str(csv_path),
+                        "--output",
+                        str(Path(self.config.output_dir) / "hv_curve.png"),
+                    ],
+                    check=True,
+                    cwd=Path(__file__).parents[2],
+                )
+
+        convergence = self.config.get("convergence_eval", {})
+        convergence_csv = Path(self.config.output_dir) / "hv_convergence.csv"
+        if (
+            bool(convergence.get("enable", False))
+            and bool(convergence.get("plot_on_finish", True))
+        ):
+            try:
+                plot_convergence_csv(
+                    convergence_csv,
+                    Path(self.config.output_dir) / "hv_convergence.png",
+                )
+            except Exception as error:  # noqa: BLE001 - post-processing is noncritical
+                (
+                    Path(self.config.output_dir) / "hv_convergence_plot_error.log"
+                ).write_text(f"{type(error).__name__}: {error}\n", encoding="utf-8")
 
         saved_state = state
         if (
@@ -975,6 +1210,7 @@ class MOTD3Workflow(TD3Workflow):
 
     def learn(self, state: State) -> State:
         self._learning_started_at = time.perf_counter()
+        self._prepare_convergence_schedule(state)
         num_devices = jax.device_count()
         one_step_timesteps = self.config.rollout_length * self.config.num_envs
         sampled_timesteps = state.metrics.sampled_timesteps.tolist()

@@ -110,6 +110,12 @@ def test_scalarization_and_whole_vector_target_selection():
     assert not jnp.any(jnp.all(selected == jnp.array([1.0, 2.0]), axis=-1))
 
 
+def test_twin_smooth_l1_is_sum_of_per_critic_means():
+    values = jnp.asarray([[[1.0, 1.0], [1.0, 1.0]], [[2.0, 2.0], [2.0, 2.0]]])
+    target = jnp.zeros((2, 2))
+    assert twin_smooth_l1_loss(values, target) == 2.0
+
+
 def test_vector_target_done_mask_smoothing_and_losses_jit():
     rewards = jnp.array([[1.0, 2.0], [3.0, 4.0]])
     next_q = jnp.array([[10.0, 20.0], [30.0, 40.0]])

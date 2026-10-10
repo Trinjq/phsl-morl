@@ -38,6 +38,11 @@ total_timesteps: 10000000
 fold_iters: 1
 num_eval_envs: 10
 eval_episodes: 3
+hv_history:
+  enable: true
+  write_csv: true
+  plot_on_finish: true
+  console_output: false
 
 random_timesteps: 1530
 learning_start_timesteps: 1530
@@ -66,7 +71,7 @@ optimizer:
   lr: 0.0003
   grad_clip_norm: 100
 
-interpolator_artifact: configs/artifacts/interp_objs_walker2d.txt
+interp_artifact_path: configs/artifacts/interp_objs_walker2d_brax_v3.txt
 save_replay_buffer: true
 checkpoint:
   enable: true

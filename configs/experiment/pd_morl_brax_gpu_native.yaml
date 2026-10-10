@@ -54,6 +54,11 @@ num_eval_envs: 10
 eval_episodes: 3
 eval_batch_size: 64
 run_final_evaluation: true
+hv_history:
+  enable: false
+  write_csv: true
+  plot_on_finish: true
+  console_output: false
 
 agent_network:
   critic_hidden_layer_sizes: [400, 400]
@@ -63,7 +68,7 @@ optimizer:
   lr: 0.0003
   grad_clip_norm: 100
 
-interp_artifact_path: configs/artifacts/interp_objs_walker2d_brax.txt
+interp_artifact_path: configs/artifacts/interp_objs_walker2d_brax_v3.txt
 save_replay_buffer: false
 checkpoint:
   enable: true
