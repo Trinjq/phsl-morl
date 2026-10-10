@@ -59,6 +59,7 @@ hv_history:
   write_csv: true
   plot_on_finish: true
   console_output: false
+  interval_timesteps: 1000000
 
 agent_network:
   critic_hidden_layer_sizes: [400, 400]

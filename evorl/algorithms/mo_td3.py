@@ -758,6 +758,8 @@ class MOTD3Workflow(TD3Workflow):
         extra = state.agent_state.extra_state
         episode_count = self._control_episode_count(extra)
         control_metrics = {}
+        history = self.config.get("hv_history", {})
+        history_interval = int(history.get("interval_timesteps", 0))
 
         if key_update_due(episode_count, int(jax.device_get(extra.eval_cnt_ep))):
             eval_cnt_ep = extra.eval_cnt_ep + jnp.uint32(1)
@@ -794,9 +796,20 @@ class MOTD3Workflow(TD3Workflow):
             self.runtime_counters["key_replacement_count"] += num_replacements
 
         extra = state.agent_state.extra_state
-        if full_evaluation_due(
-            episode_count, int(jax.device_get(extra.eval_cnt)), eval_freq=100
-        ):
+        sampled_timesteps = int(jax.device_get(state.metrics.sampled_timesteps))
+        if history_interval > 0 and bool(history.get("enable", False)):
+            next_hv_eval = getattr(self, "_next_hv_eval_transition", history_interval)
+            full_eval_due = sampled_timesteps >= next_hv_eval
+            if full_eval_due:
+                self._next_hv_eval_transition = (
+                    sampled_timesteps // history_interval + 1
+                ) * history_interval
+        else:
+            full_eval_due = full_evaluation_due(
+                episode_count, int(jax.device_get(extra.eval_cnt)), eval_freq=100
+            )
+
+        if full_eval_due:
             eval_cnt = extra.eval_cnt + jnp.uint32(1)
             state = state.replace(
                 agent_state=state.agent_state.replace(
@@ -806,7 +819,6 @@ class MOTD3Workflow(TD3Workflow):
             result = self.morl_evaluator.evaluate(
                 state.agent_state, preference_grid(0.005), repeats=3
             )
-            history = self.config.get("hv_history", {})
             if bool(history.get("enable", False)) and bool(
                 history.get("write_csv", True)
             ):
@@ -820,9 +832,7 @@ class MOTD3Workflow(TD3Workflow):
                     ),
                     artifact_sha256=self.interpolator_artifact.sha256,
                     iteration=int(jax.device_get(state.metrics.iterations)),
-                    actual_env_transitions=int(
-                        jax.device_get(state.metrics.sampled_timesteps)
-                    ),
+                    actual_env_transitions=sampled_timesteps,
                     result=result,
                     wall_clock_seconds=(
                         time.perf_counter() - self._learning_started_at
@@ -834,7 +844,7 @@ class MOTD3Workflow(TD3Workflow):
                 "training_full",
                 result,
                 int(jax.device_get(state.metrics.iterations)),
-                sampled_timesteps=int(jax.device_get(state.metrics.sampled_timesteps)),
+                sampled_timesteps=sampled_timesteps,
             )
             if bool(history.get("console_output", False)):
                 control_metrics.update(
