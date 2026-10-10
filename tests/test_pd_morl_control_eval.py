@@ -82,7 +82,7 @@ def test_pd_morl_configs_use_one_verified_brax_artifact():
             )
         ]
 
-    expected = "configs/artifacts/interp_objs_walker2d_brax_v2.txt"
+    expected = "configs/artifacts/interp_objs_walker2d_brax_v3.txt"
     assert {config.interp_artifact_path for config in configs} == {expected}
     assert "interpolator_artifact" not in configs[-1]
 

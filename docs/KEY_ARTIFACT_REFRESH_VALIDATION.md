@@ -12,7 +12,7 @@ SHA-256:
 
 cfdff6643b70591670080f1c80fa9a146c1d60576e1cca57813c1ed84ff843f2
 
-Default configurations use `configs/artifacts/interp_objs_walker2d_brax_v2.txt` (canonical LF SHA-256 `954adcddd8a97c7d3b0fbfe5e931a0291409d1a5a5005f76e515fe1408225870`) until a corrected refresh is trained and validated.
+The corrected refresh is now promoted as configs/artifacts/interp_objs_walker2d_brax_v3.txt (SHA-256 e8bce224c1b767d1588bde14a3560933a4f74262acd3982f2bd26889d79d3c93). The previous v2 artifact remains available as the historical active baseline.
 
 ## Provenance
 
@@ -77,3 +77,20 @@ An initial refreshed seed-0 launch used a relative artifact path and resolved to
 - Legacy and refreshed seed 0/1 runs: completed normally
 - Withdrawn artifact SHA: verified as cfdff6643b70591670080f1c80fa9a146c1d60576e1cca57813c1ed84ff843f2
 - Default artifact restored to the `_v2` artifact pending corrected retraining
+
+## Corrected v3 promotion
+
+The corrected trainer was run on the remote lab4090 GPU 0 in
+outputs/key_fix_full. All three keys completed with:
+
+- 2,000,128 actual environment steps and 25,088 random-action steps each;
+- 1,999,929 Critic and 999,964 Actor optimizer steps each;
+- sum_of_per_critic_mean_smooth_l1 loss aggregation;
+- finite final losses and nonzero Actor loss;
+- GPU JAX execution and successful JAX/SciPy interpolation validation.
+
+Candidate SHA-256:
+e8bce224c1b767d1588bde14a3560933a4f74262acd3982f2bd26889d79d3c93.
+
+The v3 copy and metadata are versioned in configs/artifacts/; no historical
+artifact was overwritten.

@@ -1,27 +1,37 @@
-"""Aggregate final evaluation JSON files without mixing training state."""
-
+"""Aggregate same-protocol PD-MORL HV histories across seeds."""
 from __future__ import annotations
 
 import argparse
+import csv
 import json
-import statistics
 from pathlib import Path
 
-
-def _find_metrics(run_dir: Path):
-    for name in ("final_eval.json", "metrics.json", "results.json"):
-        path = run_dir / "final_eval" / name
-        if path.exists():
-            return json.loads(path.read_text(encoding="utf-8"))
-    return None
+FIELDS = (
+    "seed", "run_id", "artifact_sha256", "kind", "preference_count", "repeats",
+    "actual_env_transitions", "iteration", "source_hv", "mean_repeat_hv",
+    "source_sparsity", "source_pareto_point_count", "wall_clock_seconds",
+)
 
 
-def _value(data, *names):
-    lowered = {str(key).lower(): value for key, value in data.items()}
-    for name in names:
-        if name in lowered:
-            return float(lowered[name])
-    return None
+def _history_rows(root: Path) -> list[dict]:
+    rows = {}
+    for path in root.rglob("hv_history.csv"):
+        with path.open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                key = (
+                    row.get("run_id", path.parent.name),
+                    row.get("kind", ""),
+                    int(row["actual_env_transitions"]),
+                )
+                row["run_id"] = key[0]
+                rows[key] = row
+    return sorted(
+        rows.values(),
+        key=lambda row: (
+            int(row.get("seed", -1) or -1),
+            int(row["actual_env_transitions"]),
+        ),
+    )
 
 
 def main() -> int:
@@ -29,32 +39,20 @@ def main() -> int:
     parser.add_argument("root", type=Path)
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
-    rows = []
-    for run_dir in sorted(args.root.glob("walker/seed_*")):
-        try:
-            seed = int(run_dir.name.split("_", 1)[1])
-        except (IndexError, ValueError):
-            continue
-        metrics = _find_metrics(run_dir)
-        if not metrics:
-            continue
-        rows.append(
-            {
-                "training_seed": seed,
-                "HV": _value(metrics, "hv", "hypervolume", "eval/hypervolume"),
-                "sparsity": _value(metrics, "sparsity", "eval/sparsity"),
-                "pareto_point_count": _value(metrics, "pareto_point_count"),
-            }
-        )
-    summary = {"runs": rows, "count": len(rows)}
-    for key in ("HV", "sparsity"):
-        values = [row[key] for row in rows if row[key] is not None]
-        if values:
-            summary[f"{key}_mean"] = statistics.mean(values)
-            summary[f"{key}_std"] = statistics.stdev(values) if len(values) > 1 else 0.0
-    output = args.output or args.root / "aggregate.json"
+    rows = _history_rows(args.root)
+    if not rows:
+        raise SystemExit("no hv_history.csv files found")
+    output = args.output or args.root / "hv_history_all_seeds.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    with output.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=FIELDS)
+        writer.writeheader()
+        writer.writerows({field: row.get(field, "") for field in FIELDS} for row in rows)
+    summary = {
+        "rows": len(rows),
+        "runs": sorted({row["run_id"] for row in rows}),
+        "output": str(output),
+    }
     print(json.dumps(summary, indent=2))
     return 0
 

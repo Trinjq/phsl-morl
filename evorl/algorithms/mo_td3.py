@@ -1,3 +1,4 @@
+import csv
 import json
 import math
 import time
@@ -48,6 +49,82 @@ from evorl.utils.pd_morl_interpolator import (
 
 from .offpolicy_utils import skip_replay_buffer_state
 from .td3 import TD3Agent, TD3NetworkParams, TD3Workflow
+
+
+HV_HISTORY_FIELDS = (
+    "seed",
+    "run_id",
+    "artifact_sha256",
+    "kind",
+    "preference_count",
+    "repeats",
+    "actual_env_transitions",
+    "iteration",
+    "source_hv",
+    "mean_repeat_hv",
+    "source_sparsity",
+    "source_pareto_point_count",
+    "wall_clock_seconds",
+)
+
+
+def append_hv_history(
+    path: Path,
+    *,
+    seed: int,
+    run_id: str,
+    artifact_sha256: str,
+    iteration: int,
+    actual_env_transitions: int,
+    result: Any,
+    wall_clock_seconds: float | None,
+) -> bool:
+    """Append one existing full-evaluation result, once."""
+    source_hv = float(getattr(result, "source_hv", result.mean_hv))
+    source_sparsity = float(
+        getattr(result, "source_sparsity", result.mean_sparsity)
+    )
+    source_count = int(
+        getattr(result, "source_pareto_point_count", len(result.pareto_returns))
+    )
+    key = (run_id, "training_full", int(actual_env_transitions))
+    seen = set()
+    if path.exists():
+        with path.open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                seen.add(
+                    (
+                        row.get("run_id", ""),
+                        row.get("kind", ""),
+                        int(row["actual_env_transitions"]),
+                    )
+                )
+    if key in seen:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not path.exists() or path.stat().st_size == 0
+    row = {
+        "seed": int(seed),
+        "run_id": run_id,
+        "artifact_sha256": artifact_sha256,
+        "kind": "training_full",
+        "preference_count": int(len(result.preferences)),
+        "repeats": int(result.returns_per_repeat.shape[0]),
+        "actual_env_transitions": int(actual_env_transitions),
+        "iteration": int(iteration),
+        "source_hv": source_hv,
+        "mean_repeat_hv": float(getattr(result, "mean_repeat_hv", result.mean_hv)),
+        "source_sparsity": source_sparsity,
+        "source_pareto_point_count": source_count,
+        "wall_clock_seconds": wall_clock_seconds,
+    }
+    with path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=HV_HISTORY_FIELDS)
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+        handle.flush()
+    return True
 
 
 def select_pessimistic_q_vector(
@@ -466,6 +543,7 @@ class MOTD3Workflow(TD3Workflow):
             "interp_objs_walker2d_brax.txt",
             "interp_objs_walker2d_brax_legacy.txt",
             "interp_objs_walker2d_brax_v2.txt",
+            "interp_objs_walker2d_brax_v3.txt",
         }
         if config.env.env_type == "brax" and artifact_path.name not in brax_artifacts:
             raise ValueError(
@@ -680,6 +758,8 @@ class MOTD3Workflow(TD3Workflow):
         extra = state.agent_state.extra_state
         episode_count = self._control_episode_count(extra)
         control_metrics = {}
+        history = self.config.get("hv_history", {})
+        history_interval = int(history.get("interval_timesteps", 0))
 
         if key_update_due(episode_count, int(jax.device_get(extra.eval_cnt_ep))):
             eval_cnt_ep = extra.eval_cnt_ep + jnp.uint32(1)
@@ -716,9 +796,20 @@ class MOTD3Workflow(TD3Workflow):
             self.runtime_counters["key_replacement_count"] += num_replacements
 
         extra = state.agent_state.extra_state
-        if full_evaluation_due(
-            episode_count, int(jax.device_get(extra.eval_cnt)), eval_freq=100
-        ):
+        sampled_timesteps = int(jax.device_get(state.metrics.sampled_timesteps))
+        if history_interval > 0 and bool(history.get("enable", False)):
+            next_hv_eval = getattr(self, "_next_hv_eval_transition", history_interval)
+            full_eval_due = sampled_timesteps >= next_hv_eval
+            if full_eval_due:
+                self._next_hv_eval_transition = (
+                    sampled_timesteps // history_interval + 1
+                ) * history_interval
+        else:
+            full_eval_due = full_evaluation_due(
+                episode_count, int(jax.device_get(extra.eval_cnt)), eval_freq=100
+            )
+
+        if full_eval_due:
             eval_cnt = extra.eval_cnt + jnp.uint32(1)
             state = state.replace(
                 agent_state=state.agent_state.replace(
@@ -728,18 +819,44 @@ class MOTD3Workflow(TD3Workflow):
             result = self.morl_evaluator.evaluate(
                 state.agent_state, preference_grid(0.005), repeats=3
             )
+            if bool(history.get("enable", False)) and bool(
+                history.get("write_csv", True)
+            ):
+                append_hv_history(
+                    Path(self.config.output_dir) / "hv_history.csv",
+                    seed=int(self.config.seed),
+                    run_id=str(
+                        self.config.get(
+                            "run_id", Path(self.config.output_dir).name
+                        )
+                    ),
+                    artifact_sha256=self.interpolator_artifact.sha256,
+                    iteration=int(jax.device_get(state.metrics.iterations)),
+                    actual_env_transitions=sampled_timesteps,
+                    result=result,
+                    wall_clock_seconds=(
+                        time.perf_counter() - self._learning_started_at
+                        if hasattr(self, "_learning_started_at")
+                        else None
+                    ),
+                )
             self._write_evaluation_snapshot(
                 "training_full",
                 result,
                 int(jax.device_get(state.metrics.iterations)),
-                sampled_timesteps=int(jax.device_get(state.metrics.sampled_timesteps)),
+                sampled_timesteps=sampled_timesteps,
             )
-            control_metrics.update(
-                {
-                    "eval/hypervolume": result.mean_hv,
-                    "eval/sparsity": result.mean_sparsity,
-                }
-            )
+            if bool(history.get("console_output", False)):
+                control_metrics.update(
+                    {
+                        "eval/hypervolume": float(
+                            getattr(result, "source_hv", result.mean_hv)
+                        ),
+                        "eval/sparsity": float(
+                            getattr(result, "source_sparsity", result.mean_sparsity)
+                        ),
+                    }
+                )
 
         return state, control_metrics
 
@@ -843,6 +960,7 @@ class MOTD3Workflow(TD3Workflow):
             "kind": kind,
             "iteration": int(iteration),
             "environment_transitions": sampled_timesteps,
+            "actual_env_transitions": sampled_timesteps,
             "wall_clock_seconds": (
                 time.perf_counter() - self._learning_started_at
                 if hasattr(self, "_learning_started_at")
@@ -935,16 +1053,55 @@ class MOTD3Workflow(TD3Workflow):
                 iterations,
                 sampled_timesteps=int(jax.device_get(state.metrics.sampled_timesteps)),
             )
-            self.recorder.write(
-                {
-                    "eval/final_hypervolume": result.mean_hv,
-                    "eval/final_sparsity": result.mean_sparsity,
-                    "eval/final_pareto_point_count": len(result.pareto_returns),
-                },
-                iterations,
-            )
+            if bool(
+                self.config.get("hv_history", {}).get("console_output", False)
+            ):
+                self.recorder.write(
+                    {
+                        "eval/final_hypervolume": float(
+                            getattr(result, "source_hv", result.mean_hv)
+                        ),
+                        "eval/final_sparsity": float(
+                            getattr(result, "source_sparsity", result.mean_sparsity)
+                        ),
+                        "eval/final_pareto_point_count": int(
+                            getattr(
+                                result,
+                                "source_pareto_point_count",
+                                len(result.pareto_returns),
+                            )
+                        ),
+                    },
+                    iterations,
+                )
         else:
             iterations = int(jax.device_get(state.metrics.iterations))
+
+        history = self.config.get("hv_history", {})
+        if bool(history.get("enable", False)) and bool(
+            history.get("plot_on_finish", True)
+        ):
+            csv_path = Path(self.config.output_dir) / "hv_history.csv"
+            if csv_path.exists():
+                import subprocess
+                import sys
+
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(
+                            Path(__file__).parents[2]
+                            / "scripts"
+                            / "plot_pd_morl_hv.py"
+                        ),
+                        "--input",
+                        str(csv_path),
+                        "--output",
+                        str(Path(self.config.output_dir) / "hv_curve.png"),
+                    ],
+                    check=True,
+                    cwd=Path(__file__).parents[2],
+                )
 
         saved_state = state
         if (
