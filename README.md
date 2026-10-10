@@ -21,6 +21,17 @@ CUDA_VISIBLE_DEVICES=0 $PY scripts/train.py \
   hydra.run.dir=outputs/pd_morl_seed42_NEW
 ```
 
+默认配置的完整 checkpoint 可恢复到新的输出目录：
+
+```bash
+CUDA_VISIBLE_DEVICES=0 $PY scripts/train.py \
+  --config-name experiment/pd_morl \
+  +resume_from_checkpoint=/absolute/run/checkpoints/1564 \
+  hydra.run.dir=outputs/pd_morl_resume_NEW
+```
+
+若原实验覆盖了主配置参数，续训时保留相同覆盖项。历史不含 replay 的快照只用于评估。
+
 导入路径应位于本仓库。若环境尚未指向主线，执行 `$PY -m pip install -e . --no-deps --no-build-isolation`。从其他目录运行脚本也应使用这一安装环境。
 
 ## 目录与入口

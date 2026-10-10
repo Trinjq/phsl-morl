@@ -1,11 +1,11 @@
-> **本项目的 PD-MORL GPU 并行基线**：从[当前协议与运行入口](docs/PD_MORL_REPRODUCTION_PROTOCOL.md)开始。当前处于 PD-MORL 基线阶段；PSL-MORL 与后续方法是下一阶段。以下保留 EvoRL 上游框架说明。
+> **本项目的 PD-MORL GPU 并行基线**：从[当前协议与运行入口](../../docs/PD_MORL_REPRODUCTION_PROTOCOL.md)开始。当前处于 PD-MORL 基线阶段；PSL-MORL 与后续方法是下一阶段。以下保留 EvoRL 上游框架说明。
 
 <h1 align="center">
   <a href="https://github.com/EMI-Group/evox">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/_static/evox_logo_dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset="docs/_static/evox_logo_light.svg">
-      <img alt="EvoX Logo" height="50" src="docs/_static/evox_logo_light.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="../../docs/_static/evox_logo_dark.svg">
+      <source media="(prefers-color-scheme: light)" srcset="../../docs/_static/evox_logo_light.svg">
+      <img alt="EvoX Logo" height="50" src="../../docs/_static/evox_logo_light.svg">
     </picture>
   </a>
 </h1>
@@ -81,7 +81,7 @@ EvoRL provides a highly efficient and user-friendly platform to develop and eval
 
 ## Overview of Key Concepts in EvoRL
 
-![](docs/_static/evorl_arch.svg)
+![](../../docs/_static/evorl_arch.svg)
 
 - **Workflow** defines the training logic of algorithms.
 - **Agent** defines the behavior of a learning agent, and its optional loss functions.
@@ -149,11 +149,11 @@ By default, the training script will enable two recorders for logging: `LogRecor
 
 Screenshot in WandB dashboard:
 
-![](docs/_static/evorl_wandb.png)
+![](../../docs/_static/evorl_wandb.png)
 
 ## Env Rendering
 
-We provide some example visualization scripts for brax and playground environments: [visualize_mjx.ipynb](archive/scripts/visualize_mjx.ipynb).
+We provide some example visualization scripts for brax and playground environments: [visualize_mjx.ipynb](../scripts/visualize_mjx.ipynb).
 
 # Algorithms
 
@@ -217,8 +217,8 @@ Test settings:
   - 1x Nvidia RTX 3090
 - Task: Swimmer
 
-![](docs/_static/es-perf.png)
-![](docs/_static/erl-pbt-perf.png)
+![](../../docs/_static/es-perf.png)
+![](../../docs/_static/erl-pbt-perf.png)
 
 # Bug report & Discussion
 

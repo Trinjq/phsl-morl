@@ -94,3 +94,34 @@ def test_restore_uses_rollout_units_and_trims_future_history(tmp_path, monkeypat
         assert [int(row["actual_env_transitions"]) for row in csv.DictReader(f)] == [
             100
         ]
+
+
+@pytest.mark.parametrize("layout", ["direct", "managed_path", "managed_api"])
+def test_checkpoint_roundtrip_preserves_empty_state_leaves(tmp_path, layout):
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+    from evorl.types import State
+    from evorl.utils.orbax_utils import load, save, setup_checkpoint_manager
+
+    state = State(params=jnp.arange(3.0), empty=jnp.zeros((0, 2)))
+    target = state.replace(params=jnp.zeros(3))
+    if layout == "direct":
+        path = tmp_path / "direct"
+        save(path, state)
+        restored = load(path, target)
+    else:
+        config = OmegaConf.create({
+            "output_dir": str(tmp_path),
+            "checkpoint": {"enable": True, "save_interval_steps": 1, "max_to_keep": 2},
+        })
+        with setup_checkpoint_manager(config) as manager:
+            manager.save(1, state, force=True)
+            manager.wait_until_finished()
+            restored = (
+                manager.restore(1, items=target) if layout == "managed_api"
+                else load(tmp_path / "checkpoints" / "1", target)
+            )
+    assert jax.tree.structure(restored) == jax.tree.structure(state)
+    np.testing.assert_array_equal(restored.params, state.params)
+    assert restored.empty.shape == (0, 2)
