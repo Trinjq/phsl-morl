@@ -131,6 +131,18 @@ python scripts/plot_pd_morl_hv.py \
 
 验证输出在 lab4090 的 `reports/mainline-validation/` 与 `outputs/mainline_verification_cpu*`。这是短链路正确性验证，不是正式训练结果或 GPU 性能测量。Brax 动力学与随机数流仍不同于原 MuJoCo 实现，不以论文 HV 数值作为接口正确性的唯一判据。
 
+2026-10-10 GPU 短训练与完整恢复验证通过（源码 `f439c47`）：
+
+- lab4090 的 GPU 0 / RTX 4090，JAX 确认为 GPU 后端；保留 160 个并行环境、400×400 网络、batch 512、每 rollout 320 次 critic 更新和每 10 次 critic 更新一次 actor/target。
+- 本次命令行短测覆盖参数：`replay_buffer_capacity=65536`、`env.max_episode_steps=16`、`start_timesteps=480`、`her_start_base_transitions=6720`、`convergence_eval.interval_transitions=2560`、`checkpoint.save_interval_steps=4`、`log_interval=4`、`key_diagnostics.enable=true`。默认主配置与训练代码未改动。
+- 第一段采样 11,840 条，保存 checkpoint 12，critic/actor 实际优化器计数为 3,840/384；随后独立进程恢复并采样到 16,960 条，保存 checkpoint 20，计数增至 6,400/640。两段配置仅输出目录、总采样预算和恢复路径不同。
+- 恢复入口逐项比较 checkpoint 的 149 个持久化数组，数值字节、形状与 dtype 全部一致，覆盖网络、优化器、replay、环境、PRNG 和计数。续训后 actor、critic、两套目标网络均改变，最终 checkpoint 与返回的完整训练状态也一致。
+- 五个训练块的损失均有限；replay 最终包含 16,960 条原始数据与 30,720 条 HER 数据，共 47,680 条。检查了双目标奖励、HER 副本与偏好、有效数据的有限性及实际发生的 episode 截断。
+- 在线 key 评估和插值器重拟合累计 5 次，归一化后的三组 key 的 L1 范数均约为 1。51 偏好 × 3 repeats 收敛记录由 3 行续接为 5 行，原 3 行完全保留；两段均完成 1001 偏好 × 3 repeats 最终评估与收敛绘图。
+- 该短测未发生 key 替换，也未触发 201 偏好周期评估；未验证默认 500-step episode 下的长训练稳定性或与不间断训练的数值轨迹一致性。短测 HV 不用于正式性能比较。没有启动正式长实验。
+
+原始日志、配置、评估和完整 checkpoint 保存在 lab4090 `/home/qiuquanj/projects/pd-morl/outputs/gpu_chain_smoke_20261010T154347Z/`。轻量证据副本在本地 `reports/gpu_chain_smoke_20261010T154347Z/`，逐项断言结果为 `restore_verification.json`。恢复观察脚本首次启动的导入路径错误及日志已保留；修正仅限该次验证脚本，最终两段训练均正常退出。
+
 ## 历史记录索引
 
 旧报告中的“当前”“下一步”“必须”和 PASS 结论均限于其当时版本，不构成现行任务或运行授权。旧文件集中移入 archive；原位置映射见 [moves.json](../archive/moves.json)，原工作区继续保留。
