@@ -18,4 +18,6 @@ hv_history:
   write_csv: true
   plot_on_finish: true
   console_output: false
+convergence_eval:
+  enable: false
 recorders: [log, wandb]

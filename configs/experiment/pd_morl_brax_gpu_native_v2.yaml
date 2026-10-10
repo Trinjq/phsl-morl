@@ -59,7 +59,15 @@ hv_history:
   write_csv: true
   plot_on_finish: true
   console_output: false
-  interval_timesteps: 1000000
+
+convergence_eval:
+  enable: true
+  interval_transitions: 250000
+  preference_step: 0.02
+  repeats: 3
+  write_csv: true
+  plot_on_finish: true
+  console_output: false
 
 agent_network:
   critic_hidden_layer_sizes: [400, 400]

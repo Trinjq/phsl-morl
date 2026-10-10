@@ -86,10 +86,25 @@ def test_batched_evaluator_matches_serial_for_key_and_padded_batches():
         assert actual.mean_repeat_sparsity == expected.mean_repeat_sparsity
 
 
-def test_device_key_evaluation_returns_fixed_jax_shape():
-    serial = PDMORLEvaluator(
-        _TwoStepEnv(1), _PreferenceAgent(), max_episode_steps=5
+def test_batched_convergence_51x3_is_finite_and_reproducible():
+    evaluator = BatchedPDMORLEvaluator(
+        key_env=_TwoStepEnv(9),
+        env=_TwoStepEnv(64),
+        agent=_PreferenceAgent(),
+        max_episode_steps=5,
     )
+    preferences = np.column_stack(
+        (np.linspace(0.0, 1.0, 51), np.linspace(1.0, 0.0, 51))
+    )
+    first = evaluator.evaluate(None, preferences, repeats=3)
+    second = evaluator.evaluate(None, preferences, repeats=3)
+    assert first.returns_per_repeat.shape == (3, 51, 2)
+    assert np.isfinite(first.returns_per_repeat).all()
+    np.testing.assert_array_equal(first.returns_per_repeat, second.returns_per_repeat)
+
+
+def test_device_key_evaluation_returns_fixed_jax_shape():
+    serial = PDMORLEvaluator(_TwoStepEnv(1), _PreferenceAgent(), max_episode_steps=5)
     batched = BatchedPDMORLEvaluator(
         key_env=_TwoStepEnv(9),
         env=_TwoStepEnv(5),

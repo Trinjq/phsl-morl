@@ -9,9 +9,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
-
 import hydra
+import numpy as np
 from hydra_utils import (
     get_output_dir,
     set_absl_log_level,
@@ -202,10 +201,14 @@ def _restore_checkpoint(config, workflow, state, metadata):
             raise ValueError(
                 f"checkpoint Artifact SHA mismatch: saved={saved_sha} current={current_sha}"
             )
-    source_history = output_root / "hv_history.csv"
-    target_history = Path(config.output_dir) / "hv_history.csv"
-    if source_history.exists() and source_history.resolve() != target_history.resolve():
-        if not target_history.exists():
+    for name in ("hv_history.csv", "hv_convergence.csv"):
+        source_history = output_root / name
+        target_history = Path(config.output_dir) / name
+        if (
+            source_history.exists()
+            and source_history.resolve() != target_history.resolve()
+            and not target_history.exists()
+        ):
             target_history.write_bytes(source_history.read_bytes())
     from evorl.utils.orbax_utils import load
 
