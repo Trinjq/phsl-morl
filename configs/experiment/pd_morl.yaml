@@ -20,18 +20,20 @@ matmul_precision: highest
 process_count: 10
 envs_per_preference_group: 16
 num_envs: 160
-rollout_length: 4
+rollout_length: 8
 fold_iters: 4
 
 # Includes prefill and training base transitions. Excludes evaluation and HER.
-total_timesteps: 10000960
+# Formal training budget: 10M base transitions.
+# Rounded up to whole 160 * 8 * 4 training chunks after the 4160 prefill.
+total_timesteps: 10003520
 random_timesteps: 1600
 learning_start_timesteps: 4160
 learner_start_replay_entries: 4096
 
 replay_batch_size: 512
 batch_size: 512
-critic_updates_per_rollout: 320
+critic_updates_per_rollout: 640
 replay_buffer_capacity: 2000000
 
 reward_size: 2
@@ -54,17 +56,11 @@ num_eval_envs: 10
 eval_episodes: 3
 eval_batch_size: 64
 run_final_evaluation: true
+# Base transitions per preference group, including prefill; checked at host boundaries.
+key_update_interval_group_transitions: 10000
 hv_history:
   enable: true
-  write_csv: true
-  plot_on_finish: true
-  console_output: false
-
-convergence_eval:
-  enable: true
   interval_transitions: 250000
-  preference_step: 0.02
-  repeats: 3
   write_csv: true
   plot_on_finish: true
   console_output: false
@@ -85,9 +81,9 @@ interp_artifact_path: configs/artifacts/interp_objs_walker2d_brax_v3.txt
 save_replay_buffer: true
 checkpoint:
   enable: true
-  # Rollout iterations, not environment transitions: 1564 * 640 = 1,000,960.
+  # Rollout iterations, not environment transitions: 784 * 1280 = 1,003,520.
   # Divisible by fold_iters so every save falls on a host boundary.
-  save_interval_steps: 1564
+  save_interval_steps: 784
   max_to_keep: 2
 
 env:

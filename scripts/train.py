@@ -229,6 +229,18 @@ def _restore_checkpoint(config, workflow, state, metadata):
             "resume requires save_replay_buffer=true; incomplete checkpoints are rejected"
         )
     output_root = checkpoint_path.parent.parent
+    saved_config_path = output_root / "resolved_config.yaml"
+    if saved_config_path.exists():
+        saved_config = OmegaConf.load(saved_config_path)
+        unsupported = [
+            name for name, value in saved_config.get("agent_network", {}).items()
+            if name not in config.get("agent_network", {})
+            and value is not False and value is not None
+        ]
+        if unsupported:
+            raise ValueError(
+                f"checkpoint uses unsupported agent_network settings: {unsupported}"
+            )
     saved_metadata_path = output_root / "run_metadata.json"
     if saved_metadata_path.exists() and metadata:
         saved_metadata = json.loads(saved_metadata_path.read_text(encoding="utf-8"))
@@ -809,7 +821,7 @@ def train(config: DictConfig) -> None:
                 else "source-faithful PD-MORL reproduction with Brax environment adaptation"
             ),
             "interpolator_backend": "jax",
-            "key_objective_normalization": {"initial": "l2", "online": "l1"},
+            "key_objective_normalization": {"initial": "l2", "online": "l2"},
             "key_artifact_path": str(artifact_path.resolve()),
             "key_artifact_sha256": hashlib.sha256(
                 artifact_path.read_bytes().replace(b"\r\n", b"\n")

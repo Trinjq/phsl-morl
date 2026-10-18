@@ -26,11 +26,11 @@ CUDA_VISIBLE_DEVICES=0 $PY scripts/train.py \
 ```bash
 CUDA_VISIBLE_DEVICES=0 $PY scripts/train.py \
   --config-name experiment/pd_morl \
-  +resume_from_checkpoint=/absolute/run/checkpoints/1564 \
+  +resume_from_checkpoint=/absolute/run/checkpoints/784 \
   hydra.run.dir=outputs/pd_morl_resume_NEW
 ```
 
-若原实验覆盖了主配置参数，续训时保留相同覆盖项。历史不含 replay 的快照只用于评估。
+续训时使用原实验的配置参数；此前 rollout 4／K 320 的 checkpoint 需显式保留原采样、更新和总预算设置。历史不含 replay 的快照只用于评估。
 
 导入路径应位于本仓库。若环境尚未指向主线，执行 `$PY -m pip install -e . --no-deps --no-build-isolation`。从其他目录运行脚本也应使用这一安装环境。
 
@@ -44,11 +44,14 @@ CUDA_VISIBLE_DEVICES=0 $PY scripts/train.py \
 | `configs/experiment/pd_morl_key_replacement_diagnostics.yaml` | 继承主配置，只开启锚点记录 |
 | `configs/artifacts/` | 当前 v3 artifact 与对应元数据 |
 | `scripts/train.py` | 主训练及完整 checkpoint 恢复 |
+| `scripts/run_pd_morl_update_sweep.py` | critic 更新次数筛选；`--sampling-lengths 2 8` 比较等更新量的采样节奏，每张 GPU 最多两个任务 |
+| `scripts/upload_pd_morl_records_wandb.py` | 将已完成队列的历史训练记录补录到 W&B，保留原始输出 |
+| `scripts/create_pd_morl_wandb_workspace.py` | 为已上传的九项实验保存 W&B 曲线与最终指标对比工作区 |
 | `scripts/train_brax_key_solutions.py`、`validate_brax_key_solutions.py` | 独立 key 预训练与只读验证 |
 | `scripts/plot_pd_morl_hv.py`、`plot_pd_morl_convergence.py` | 两种评估历史的独立绘图 |
 | `scripts/analyze_key_replacements.py` | 分析锚点替换诊断 |
 | `scripts/export_pd_morl_hv_history.py`、`aggregate_pd_morl_runs.py` | 已有评估记录导出与整理 |
-| `scripts/benchmark_pd_morl_jax_rbf.py` | 当前在线 L1 插值器微基准 |
+| `scripts/benchmark_pd_morl_jax_rbf.py` | 当前在线 L2 插值器微基准 |
 | `tests/` | 当前实现的回归测试 |
 | `outputs/` | 本主线的新实验；与历史实验目录分开 |
 | [archive/](archive/README.md) | 旧脚本、配置、artifact、报告及迁移映射 |
@@ -61,6 +64,6 @@ CUDA_VISIBLE_DEVICES=0 $PY scripts/train.py \
 
 本地 `../pdmorl_source` 是原版 PD-MORL 参考源码；`../psl_morl_analysis` 是下一阶段的论文/方法资料。已有结果图与分析目录原位保留，不能当作新主线重新运行所得结果。
 
-主线默认保存完整 replay checkpoint，约每 100 万条新训练数据保存一次，保留最近两份；结束时先完成保存，再进行最终评估。主训练的 160 环境、K=320、batch=512、在线 L1 等学习设置保持当前并行基线口径。
+主线默认保存完整 replay checkpoint，约每 100 万条新训练数据保存一次，保留最近两份；结束时先完成保存，再进行最终评估。主训练采用 160 环境、rollout_length=8、K=640、batch=512，插值器初始化和在线更新均逐行 L2 归一化。默认总预算为包含 4160 条预填充的 10,003,520 条基础 transitions，以对齐完整训练块。
 
 当前协议内维护唯一的待核对清单。历史报告中的“下一步”“必须”和旧 PASS 状态不再驱动新实验。

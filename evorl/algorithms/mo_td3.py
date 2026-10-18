@@ -40,11 +40,6 @@ from evorl.types import (
 from evorl.utils import running_statistics
 from evorl.utils.jax_utils import tree_get
 from evorl.utils.morl_math import directional_angle, scalarize
-from evorl.utils.pd_morl_convergence import (
-    append_convergence_result,
-    plot_convergence_csv,
-    prepare_convergence_history,
-)
 from evorl.utils.pd_morl_interpolator import (
     PDMORLInterpolatorState,
     fit_interpolator_state,
@@ -391,7 +386,8 @@ class PreferenceActor(nn.Module):
             layer_sizes=(*self.hidden_layer_sizes, self.action_size),
             activation=nn.relu,
             activation_final=nn.tanh,
-            kernel_init=jax.nn.initializers.xavier_normal(),
+            # PyTorch xavier_normal_ uses an untruncated normal distribution.
+            kernel_init=jax.nn.initializers.variance_scaling(1.0, "fan_avg", "normal"),
             name="actor",
         )(inputs)
 
@@ -412,7 +408,7 @@ class TwinVectorCritic(nn.Module):
             MLP(
                 layer_sizes=(*self.hidden_layer_sizes, self.reward_size),
                 activation=nn.relu,
-                kernel_init=jax.nn.initializers.xavier_normal(),
+                kernel_init=jax.nn.initializers.variance_scaling(1.0, "fan_avg", "normal"),
                 name=f"critic_{critic_id}",
             )(inputs)
             for critic_id in range(2)
@@ -901,14 +897,25 @@ class MOTD3Workflow(TD3Workflow):
         )
 
     def _after_multi_steps(self, state: State):
-        """Run source-faithful key/full evaluation at the host boundary."""
+        """Run key/full evaluation at the host boundary."""
         extra = state.agent_state.extra_state
         episode_count = self._control_episode_count(extra)
         control_metrics = {}
         history = self.config.get("hv_history", {})
         eval_cnt_ep_before = int(jax.device_get(extra.eval_cnt_ep))
 
-        if key_update_due(episode_count, eval_cnt_ep_before):
+        key_interval = self.config.get("key_update_interval_group_transitions")
+        if key_interval is None:
+            key_due = key_update_due(episode_count, eval_cnt_ep_before)
+        else:
+            key_interval = int(key_interval)
+            if key_interval <= 0:
+                raise ValueError("key_update_interval_group_transitions must be positive")
+            group_steps = int(jax.device_get(extra.worker_steps).min())
+            key_target = getattr(self, "_next_key_update_group_transition", key_interval)
+            key_due = group_steps >= key_target
+
+        if key_due:
             diagnostics_enabled = bool(
                 self.config.get("key_diagnostics", {}).get("enable", False)
             )
@@ -949,6 +956,11 @@ class MOTD3Workflow(TD3Workflow):
             state = state.replace(
                 agent_state=state.agent_state.replace(extra_state=extra)
             )
+            if key_interval is not None:
+                # ponytail: reuse checkpointed group counters; evaluate once per boundary.
+                self._next_key_update_group_transition = (
+                    group_steps // key_interval + 1
+                ) * key_interval
             num_replacements = int(improved.sum())
             control_metrics["control/key_replacements"] = num_replacements
             self.key_replacement_count = (
@@ -997,9 +1009,18 @@ class MOTD3Workflow(TD3Workflow):
 
         extra = state.agent_state.extra_state
         sampled_timesteps = int(jax.device_get(state.metrics.sampled_timesteps))
-        full_eval_due = full_evaluation_due(
-            episode_count, int(jax.device_get(extra.eval_cnt)), eval_freq=100
-        )
+        interval = history.get("interval_transitions")
+        if interval is None:
+            # Reference configurations retain the original episode-based protocol.
+            full_eval_due = full_evaluation_due(
+                episode_count, int(jax.device_get(extra.eval_cnt)), eval_freq=100
+            )
+        else:
+            interval = int(interval)
+            if interval <= 0:
+                raise ValueError("hv_history.interval_transitions must be positive")
+            target = getattr(self, "_next_full_eval_transition", interval)
+            full_eval_due = sampled_timesteps >= target
 
         if full_eval_due:
             eval_cnt = extra.eval_cnt + jnp.uint32(1)
@@ -1011,6 +1032,9 @@ class MOTD3Workflow(TD3Workflow):
             result = self.morl_evaluator.evaluate(
                 state.agent_state, preference_grid(0.005), repeats=3
             )
+            if interval is not None:
+                # Evaluate current weights once; do not backfill crossed thresholds.
+                self._next_full_eval_transition = (sampled_timesteps // interval + 1) * interval
             if bool(history.get("enable", False)) and bool(
                 history.get("write_csv", True)
             ):
@@ -1048,82 +1072,27 @@ class MOTD3Workflow(TD3Workflow):
                     }
                 )
 
-        control_metrics.update(self._maybe_evaluate_convergence(state))
         return state, control_metrics
 
-    def _convergence_run_id(self) -> str:
-        configured = self.config.get("run_id")
-        if configured:
-            return str(configured)
-        path = Path(self.config.output_dir) / "hv_convergence.csv"
-        if path.exists():
-            with path.open(newline="", encoding="utf-8") as handle:
-                for row in csv.DictReader(handle):
-                    if row.get("kind") == "convergence" and row.get("run_id"):
-                        return row["run_id"]
-        return Path(self.config.output_dir).name
-
-    def _prepare_convergence_schedule(self, state: State) -> None:
-        config = self.config.get("convergence_eval", {})
-        if not bool(config.get("enable", False)):
-            return
-        interval = int(config.get("interval_transitions", 0))
-        sampled = int(jax.device_get(state.metrics.sampled_timesteps))
-        self._next_convergence_threshold = prepare_convergence_history(
-            Path(self.config.output_dir) / "hv_convergence.csv",
-            run_id=self._convergence_run_id(),
-            sampled_timesteps=sampled,
-            interval=interval,
-        )
-
-    def _maybe_evaluate_convergence(self, state: State) -> dict[str, float]:
-        config = self.config.get("convergence_eval", {})
-        if not bool(config.get("enable", False)):
-            return {}
-        interval = int(config.get("interval_transitions", 0))
-        if interval <= 0:
-            raise ValueError("convergence_eval.interval_transitions must be positive")
-        sampled = int(jax.device_get(state.metrics.sampled_timesteps))
-        target = getattr(self, "_next_convergence_threshold", None)
-        if target is None:
-            self._prepare_convergence_schedule(state)
-            target = self._next_convergence_threshold
-        if sampled < target:
-            return {}
-
-        started_at = time.perf_counter()
-        result = self.morl_evaluator.evaluate(
-            state.agent_state,
-            preference_grid(float(config.get("preference_step", 0.02))),
-            repeats=int(config.get("repeats", 3)),
-        )
-        evaluation_seconds = time.perf_counter() - started_at
-        if bool(config.get("write_csv", True)):
-            append_convergence_result(
-                Path(self.config.output_dir) / "hv_convergence.csv",
-                seed=int(self.config.seed),
-                run_id=self._convergence_run_id(),
-                artifact_sha256=self.interpolator_artifact.sha256,
-                target_transition_threshold=target,
-                actual_env_transitions=sampled,
-                iteration=int(jax.device_get(state.metrics.iterations)),
-                result=result,
-                evaluation_seconds=evaluation_seconds,
-                wall_clock_seconds=(
-                    time.perf_counter() - self._learning_started_at
-                    if hasattr(self, "_learning_started_at")
-                    else None
-                ),
+    def _prepare_evaluation_schedule(self, state: State) -> None:
+        key_interval = self.config.get("key_update_interval_group_transitions")
+        if key_interval is not None:
+            key_interval = int(key_interval)
+            if key_interval <= 0:
+                raise ValueError("key_update_interval_group_transitions must be positive")
+            group_steps = int(
+                jax.device_get(state.agent_state.extra_state.worker_steps).min()
             )
-        self._next_convergence_threshold = (sampled // interval + 1) * interval
-        if not bool(config.get("console_output", False)):
-            return {}
-        return {
-            "convergence/source_hv": float(
-                getattr(result, "source_hv", result.mean_hv)
-            ),
-            "convergence/evaluation_seconds": evaluation_seconds,
-        }
+            self._next_key_update_group_transition = (
+                group_steps // key_interval + 1
+            ) * key_interval
+        interval = self.config.get("hv_history", {}).get("interval_transitions")
+        if interval is not None:
+            interval = int(interval)
+            if interval <= 0:
+                raise ValueError("hv_history.interval_transitions must be positive")
+            sampled = int(jax.device_get(state.metrics.sampled_timesteps))
+            self._next_full_eval_transition = (sampled // interval + 1) * interval
 
     def _observe_diagnostics(self, iteration, train_metrics, state):
         """Write periodic formal-run diagnostics without touching learner state."""
@@ -1372,22 +1341,6 @@ class MOTD3Workflow(TD3Workflow):
                     cwd=Path(__file__).parents[2],
                 )
 
-        convergence = self.config.get("convergence_eval", {})
-        convergence_csv = Path(self.config.output_dir) / "hv_convergence.csv"
-        if (
-            bool(convergence.get("enable", False))
-            and bool(convergence.get("plot_on_finish", True))
-        ):
-            try:
-                plot_convergence_csv(
-                    convergence_csv,
-                    Path(self.config.output_dir) / "hv_convergence.png",
-                )
-            except Exception as error:  # noqa: BLE001 - post-processing is noncritical
-                (
-                    Path(self.config.output_dir) / "hv_convergence_plot_error.log"
-                ).write_text(f"{type(error).__name__}: {error}\n", encoding="utf-8")
-
         return state
 
     def _parallel_actor_update_mask(self, state):
@@ -1409,7 +1362,7 @@ class MOTD3Workflow(TD3Workflow):
     def learn(self, state: State) -> State:
         self._learning_started_at = time.perf_counter()
         self.runtime_timing["host_chunk_time"] = 0.0
-        self._prepare_convergence_schedule(state)
+        self._prepare_evaluation_schedule(state)
         num_devices = jax.device_count()
         one_step_timesteps = self.config.rollout_length * self.config.num_envs
         sampled_timesteps = int(jax.device_get(state.metrics.sampled_timesteps))

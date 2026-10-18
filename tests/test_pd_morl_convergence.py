@@ -4,7 +4,9 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 import numpy as np
-from evorl.algorithms.mo_td3 import MOTD3Workflow
+import pytest
+from evorl.algorithms.mo_td3 import MOTD3Workflow, PDMORLGPUWorkflow
+from evorl.types import PyTreeDict, State
 from evorl.utils.pd_morl_convergence import (
     append_convergence_result,
     plot_convergence_csv,
@@ -43,79 +45,91 @@ def _append(path, threshold, actual, hv=5.0, run_id="seed15"):
     )
 
 
-def test_target_config_composes_with_independent_protocols():
+def test_target_config_composes_with_unified_full_evaluation():
     with initialize(version_base=None, config_path="../configs"):
         config = compose(config_name="experiment/pd_morl")
-    assert "interval_timesteps" not in config.hv_history
-    assert config.convergence_eval.interval_transitions == 250_000
-    assert config.convergence_eval.preference_step == 0.02
-    assert config.convergence_eval.repeats == 3
+    assert config.hv_history.interval_transitions == 250_000
+    assert "convergence_eval" not in config
+    assert not hasattr(MOTD3Workflow, "_maybe_evaluate_convergence")
 
 
-def test_formal_trigger_has_no_convergence_override():
+def test_reference_episode_trigger_is_retained():
     source = inspect.getsource(MOTD3Workflow._after_multi_steps)
     assert "interval_timesteps" not in source
     assert "full_evaluation_due" in source
 
 
-def test_disabled_convergence_does_not_evaluate(tmp_path):
-    workflow = MOTD3Workflow.__new__(MOTD3Workflow)
-    workflow.config = OmegaConf.create(
-        {"output_dir": str(tmp_path), "convergence_eval": {"enable": False}}
-    )
-    workflow.morl_evaluator = SimpleNamespace(
-        evaluate=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError())
-    )
-    state = SimpleNamespace()
-    assert workflow._maybe_evaluate_convergence(state) == {}
-
-
-def test_convergence_boundary_crossing_is_single_and_read_only(tmp_path):
-    calls = []
-
-    class Evaluator:
-        def evaluate(self, agent_state, preferences, repeats):
-            calls.append((agent_state, preferences.copy(), repeats))
-            return _result()
-
-    workflow = MOTD3Workflow.__new__(MOTD3Workflow)
-    workflow.config = OmegaConf.create(
-        {
-            "seed": 15,
-            "output_dir": str(tmp_path),
-            "convergence_eval": {
-                "enable": True,
-                "interval_transitions": 250_000,
-                "preference_step": 0.02,
-                "repeats": 3,
-                "write_csv": True,
-                "console_output": False,
-            },
-        }
-    )
-    workflow.morl_evaluator = Evaluator()
+def test_unified_full_evaluation_boundaries_resume_and_outputs(tmp_path):
+    calls, snapshots = [], []
+    workflow = PDMORLGPUWorkflow.__new__(PDMORLGPUWorkflow)
+    workflow.config = OmegaConf.create({
+        "seed": 15, "output_dir": str(tmp_path), "envs_per_preference_group": 16,
+        "hv_history": {"enable": True, "write_csv": True, "interval_transitions": 250_000},
+        # Even a stale override cannot re-enable the duplicate 51-preference evaluation.
+        "convergence_eval": {"enable": True},
+    })
     workflow.interpolator_artifact = SimpleNamespace(sha256="abc")
-    workflow._next_convergence_threshold = 250_000
-    agent_state = object()
-    state = SimpleNamespace(
-        agent_state=agent_state,
-        metrics=SimpleNamespace(
-            sampled_timesteps=jnp.uint32(800_000), iterations=jnp.uint32(9)
-        ),
-    )
 
-    assert workflow._maybe_evaluate_convergence(state) == {}
-    assert state.agent_state is agent_state
-    assert len(calls) == 1
-    assert calls[0][1].shape == (51, 2)
-    assert calls[0][2] == 3
-    assert workflow._next_convergence_threshold == 1_000_000
-    assert workflow._maybe_evaluate_convergence(state) == {}
-    assert len(calls) == 1
-    with (tmp_path / "hv_convergence.csv").open(newline="", encoding="utf-8") as f:
-        row = next(csv.DictReader(f))
-    assert row["target_transition_threshold"] == "250000"
-    assert row["actual_env_transitions"] == "800000"
+    def evaluate(agent_state, preferences, repeats):
+        calls.append((agent_state, preferences.copy(), repeats))
+        result = _result()
+        result.preferences = preferences
+        result.returns_per_repeat = np.zeros((repeats, len(preferences), 2))
+        return result
+
+    workflow.morl_evaluator = SimpleNamespace(evaluate=evaluate)
+    workflow._write_evaluation_snapshot = lambda kind, result, iteration, **kw: snapshots.append(
+        (kind, len(result.preferences), kw["sampled_timesteps"]))
+    params, interpolator, rng, replay = object(), object(), object(), object()
+    state = State(
+        agent_state=PyTreeDict(params=params, extra_state=PyTreeDict(
+            episode_count=jnp.full((10,), 16_000), eval_cnt_ep=jnp.uint32(1000),
+            eval_cnt=jnp.uint32(1), interpolator=interpolator)),
+        metrics=PyTreeDict(sampled_timesteps=jnp.uint32(249_999), iterations=jnp.uint32(9)),
+        key=rng, replay_buffer_state=replay,
+    )
+    # Large episode counts cannot cause an early transition-based evaluation.
+    workflow._prepare_evaluation_schedule(state)
+    assert workflow._after_multi_steps(state)[0] is state
+    assert not calls
+    for sampled in (250_320, 500_080, 1_260_000):
+        state = state.replace(metrics=state.metrics.replace(sampled_timesteps=jnp.uint32(sampled)))
+        # Evaluation also works with zero completed episodes.
+        state = state.replace(agent_state=state.agent_state.replace(
+            extra_state=state.agent_state.extra_state.replace(episode_count=jnp.zeros((10,)))))
+        state, _ = workflow._after_multi_steps(state)
+        assert state.agent_state.params is params
+        assert state.agent_state.extra_state.interpolator is interpolator
+        assert state.key is rng and state.replay_buffer_state is replay
+        workflow._after_multi_steps(state)  # The same boundary is not evaluated twice.
+    assert len(calls) == 3
+    assert all(p.shape == (201, 2) and n == 3 for _, p, n in calls)
+    np.testing.assert_allclose(calls[0][1][[0, 100, 200]], [[0, 1], [.5, .5], [1, 0]])
+    assert int(state.agent_state.extra_state.eval_cnt) == 4
+    assert workflow._next_full_eval_transition == 1_500_000
+    assert snapshots == [("training_full", 201, x) for x in (250_320, 500_080, 1_260_000)]
+    with (tmp_path / "hv_history.csv").open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [int(r["actual_env_transitions"]) for r in rows] == [250_320, 500_080, 1_260_000]
+    assert all(r["preference_count"] == "201" and r["repeats"] == "3" for r in rows)
+    assert rows[0]["source_hv"] == "5.0" and rows[0]["source_sparsity"] == "2.0"
+    assert not (tmp_path / "hv_convergence.csv").exists()
+    # A restored checkpoint initializes its next future threshold without backfilling.
+    del workflow._next_full_eval_transition
+    workflow._prepare_evaluation_schedule(state)
+    assert workflow._next_full_eval_transition == 1_500_000
+    workflow._after_multi_steps(state)
+    assert len(calls) == 3
+    for invalid in (0, -1):
+        workflow.config.hv_history.interval_transitions = invalid
+        with pytest.raises(ValueError, match="interval_transitions must be positive"):
+            workflow._prepare_evaluation_schedule(state)
+        with pytest.raises(ValueError, match="interval_transitions must be positive"):
+            workflow._after_multi_steps(state)
+
+
+
+
 
 
 def test_resume_uses_last_valid_threshold_and_archives_future_rows(tmp_path):
@@ -152,11 +166,6 @@ def test_empty_resume_does_not_backfill_old_thresholds(tmp_path):
     )
 
 
-def test_resume_keeps_existing_run_id(tmp_path):
-    _append(tmp_path / "hv_convergence.csv", 250_000, 250_320, run_id="original")
-    workflow = MOTD3Workflow.__new__(MOTD3Workflow)
-    workflow.config = OmegaConf.create({"output_dir": str(tmp_path)})
-    assert workflow._convergence_run_id() == "original"
 
 
 def test_convergence_csv_deduplicates_run_and_threshold(tmp_path):

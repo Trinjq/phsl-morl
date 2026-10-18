@@ -20,7 +20,7 @@ from evorl.evaluators.pd_morl import (
     update_key_solutions,
     update_key_solutions_jax,
 )
-from evorl.utils.pd_morl_interpolator import key_preferences
+from evorl.utils.pd_morl_interpolator import fit_interpolator_state, key_preferences
 from pymoo.indicators.hv import HV
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 
@@ -84,6 +84,9 @@ def test_pd_morl_configs_use_one_verified_brax_artifact():
     expected = "configs/artifacts/interp_objs_walker2d_brax_v3.txt"
     assert {config.interp_artifact_path for config in configs} == {expected}
     assert "interpolator_artifact" not in configs[-1]
+    assert configs[0].key_update_interval_group_transitions == 10_000
+    assert configs[1].key_update_interval_group_transitions == 10_000
+    assert "key_update_interval_group_transitions" not in configs[-1]
 
 
 def test_brax_run_rejects_mujoco_key_artifact():
@@ -113,6 +116,106 @@ def test_full_evaluation_trigger_is_independent():
     assert not key_update_due([101] * 10, 101)
 
 
+def test_group_transition_key_schedule_boundaries_and_resume(tmp_path):
+    import jax.numpy as jnp
+    from types import SimpleNamespace
+
+    from evorl.algorithms.mo_td3 import PDMORLGPUWorkflow
+    from evorl.types import PyTreeDict, State
+    from omegaconf import OmegaConf
+
+    workflow = PDMORLGPUWorkflow.__new__(PDMORLGPUWorkflow)
+    workflow.config = OmegaConf.create(
+        {
+            "envs_per_preference_group": 16,
+            "reward_size": 2,
+            "key_update_interval_group_transitions": 10_000,
+            "hv_history": {"interval_transitions": 250_000},
+        }
+    )
+    workflow.runtime_counters = dict(
+        key_evaluation_count=0, rbf_refit_count=0, key_replacement_count=0
+    )
+    calls = []
+    old = jnp.asarray([[1.0, 2.0], [2.0, 2.0], [3.0, 1.0]])
+    candidate = jnp.asarray([[99.0, 1.0], [3.0, 3.0], [4.0, -99.0]])
+
+    def evaluate_keys(agent_state, repeats):
+        calls.append(repeats)
+        return jnp.stack((candidate - 0.5, candidate, candidate + 0.5))
+
+    workflow.morl_evaluator = SimpleNamespace(evaluate_keys_device=evaluate_keys)
+    params, rng, replay = object(), object(), object()
+    state = State(
+        agent_state=PyTreeDict(
+            params=params,
+            extra_state=PyTreeDict(
+                worker_steps=jnp.full((10,), 416, dtype=jnp.uint32),
+                episode_count=jnp.full((10,), 16_000, dtype=jnp.uint32),
+                eval_cnt_ep=jnp.uint32(1),
+                eval_cnt=jnp.uint32(1),
+                raw_key_solutions=old,
+                interpolator=None,
+            ),
+        ),
+        metrics=PyTreeDict(
+            sampled_timesteps=jnp.uint32(4160), iterations=jnp.uint32(0)
+        ),
+        key=rng,
+        replay_buffer_state=replay,
+    )
+
+    def steps(values):
+        return state.replace(
+            agent_state=state.agent_state.replace(
+                extra_state=state.agent_state.extra_state.replace(
+                    worker_steps=jnp.asarray(values, dtype=jnp.uint32)
+                )
+            )
+        )
+
+    workflow._prepare_evaluation_schedule(state)
+    assert workflow._next_key_update_group_transition == 10_000
+    # Episodes and HER entries cannot advance the base-transition trigger.
+    assert workflow._after_multi_steps(state)[0] is state
+    assert workflow._after_multi_steps(steps([10_000] * 9 + [9999]))[0].key is rng
+    assert not calls
+    state, _ = workflow._after_multi_steps(steps([10_000] * 10))
+    assert calls == [3]
+    assert state.agent_state.params is params and state.key is rng
+    assert state.replay_buffer_state is replay
+    np.testing.assert_allclose(
+        state.agent_state.extra_state.raw_key_solutions,
+        [[1.0, 2.0], [3.0, 3.0], [4.0, -99.0]],
+    )
+    assert workflow.runtime_counters["key_replacement_count"] == 2
+    assert workflow._next_key_update_group_transition == 20_000
+    workflow._after_multi_steps(state)
+    assert calls == [3]
+    # Refit on the next trigger even when no candidate improves.
+    state, _ = workflow._after_multi_steps(steps([20_000] * 10))
+    assert workflow.runtime_counters["key_replacement_count"] == 2
+    assert workflow.runtime_counters["rbf_refit_count"] == 2
+    # A jump over multiple thresholds evaluates current weights only once.
+    state, _ = workflow._after_multi_steps(steps([55_000] * 10))
+    assert calls == [3, 3, 3]
+    assert int(state.agent_state.extra_state.eval_cnt_ep) == 4
+    assert workflow._next_key_update_group_transition == 60_000
+    del workflow._next_key_update_group_transition
+    workflow._prepare_evaluation_schedule(state)
+    assert workflow._next_key_update_group_transition == 60_000
+    workflow._after_multi_steps(state)
+    assert len(calls) == 3
+    state, _ = workflow._after_multi_steps(steps([60_000] * 10))
+    assert len(calls) == 4
+    for invalid in (0, -1):
+        workflow.config.key_update_interval_group_transitions = invalid
+        with pytest.raises(ValueError, match="group_transitions must be positive"):
+            workflow._prepare_evaluation_schedule(state)
+        with pytest.raises(ValueError, match="group_transitions must be positive"):
+            workflow._after_multi_steps(state)
+
+
 def test_worker_episode_counts_are_cumulative():
     dones = np.array([[1, 0, 0, 1], [0, 1, 1, 0]])
     np.testing.assert_array_equal(completed_episodes_by_worker(dones, 2), [2, 2])
@@ -139,12 +242,12 @@ def test_replacement_is_direct_assignment_and_no_ema():
     np.testing.assert_array_equal(updated, candidate)
 
 
-def test_online_refit_uses_l1():
+def test_online_refit_uses_l2():
     old = np.array([[1.0, 2.0], [2.0, 2.0], [3.0, 1.0]])
     updated, _, state = update_key_solutions(old, np.stack((old, old)), KEYS)
     np.testing.assert_allclose(
         state.normalized_key_solutions,
-        updated / np.linalg.norm(updated, ord=1, axis=1, keepdims=True),
+        updated / np.linalg.norm(updated, ord=2, axis=1, keepdims=True),
         rtol=0,
         atol=2e-5,
     )
@@ -159,7 +262,7 @@ def test_jitted_online_update_averages_repeats_and_refits():
     np.testing.assert_array_equal(improved, [True, True, True])
     np.testing.assert_allclose(
         state.normalized_key_solutions,
-        expected / np.linalg.norm(expected, ord=1, axis=1, keepdims=True),
+        expected / np.linalg.norm(expected, ord=2, axis=1, keepdims=True),
         atol=2e-5,
     )
 
@@ -170,6 +273,11 @@ def test_refit_even_without_replacement():
     assert not improved.any()
     assert state.coefficients.shape[0] == len(KEYS) + state.powers.shape[0]
     np.testing.assert_array_equal(updated, old)
+    initial = fit_interpolator_state(KEYS, old, "initial")
+    np.testing.assert_allclose(
+        state.normalized_key_solutions, initial.normalized_key_solutions
+    )
+    np.testing.assert_allclose(state.coefficients, initial.coefficients)
 
 
 def test_interpolator_shape_stable_after_refit():

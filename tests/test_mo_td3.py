@@ -89,6 +89,15 @@ def test_mo_actor_critic_shapes_architecture_and_independence():
         assert all(jnp.all(layer["bias"] == 0) for layer in params.values())
     assert _tree_changed(critic_params["critic_0"], critic_params["critic_1"])
 
+    for params in (actor_params, critic_params["critic_0"], critic_params["critic_1"]):
+        for layer in params.values():
+            kernel = layer["kernel"]
+            expected_std = jnp.sqrt(2.0 / sum(kernel.shape))
+            assert jnp.isclose(jnp.std(kernel), expected_std, rtol=0.12)
+            assert jnp.all(layer["bias"] == 0)
+        # Variance-corrected truncated Xavier has no samples beyond 3 sigma.
+        assert jnp.any(jnp.abs(params["hidden_1"]["kernel"]) > 3.0 / jnp.sqrt(400.0))
+
 
 def test_scalarization_and_whole_vector_target_selection():
     q_values = jnp.array([[1.0, 10.0], [5.0, 2.0]])

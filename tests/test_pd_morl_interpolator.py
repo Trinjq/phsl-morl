@@ -35,7 +35,7 @@ def test_scipy_jax_golden(normalization, solutions, dtype):
     with jax.enable_x64(dtype == np.float64):
         reference = RBFInterpolator(
             KEYS,
-            np.asarray(normalize_key_solutions(solutions, normalization)),
+            solutions / np.linalg.norm(solutions, ord=2, axis=1, keepdims=True),
             kernel="linear",
             smoothing=0,
             degree=0,
@@ -59,15 +59,14 @@ def test_scipy_jax_golden(normalization, solutions, dtype):
 
 def test_official_walker_key_order_and_normalizations():
     assert np.array_equal(key_preferences(2), KEYS)
-    assert np.allclose(
-        np.linalg.norm(normalize_key_solutions(SOLUTIONS, "initial"), ord=2, axis=1), 1
-    )
-    assert np.allclose(
-        np.linalg.norm(normalize_key_solutions(SOLUTIONS, "online"), ord=1, axis=1), 1
-    )
-    assert np.array_equal(
-        normalize_key_solutions(np.zeros((1, 2)), "initial"), np.zeros((1, 2))
-    )
+    for normalization in ("initial", "online"):
+        assert np.allclose(
+            normalize_key_solutions(SOLUTIONS, normalization),
+            SOLUTIONS / np.linalg.norm(SOLUTIONS, ord=2, axis=1, keepdims=True),
+        )
+        assert np.array_equal(
+            normalize_key_solutions(np.zeros((1, 2)), normalization), np.zeros((1, 2))
+        )
 
 
 def test_fit_is_jittable():
