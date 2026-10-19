@@ -31,13 +31,17 @@ def load(path, state: chex.ArrayTree) -> chex.ArrayTree:
     """Load state from a file.
 
     Args:
-        path: Checkpoint path
+        path: Standalone checkpoint path or a CheckpointManager step directory.
         state: The same structure as the saved state for restore. Can be a dummy state or its abstract_state by `jtu.tree_map(ocp.utils.to_shape_dtype_struct, state)`
 
     Returns:
         The loaded state.
     """
     path = os.path.abspath(os.path.expanduser(path))
+    # CheckpointManager stores its single state under step/default.
+    managed_item = os.path.join(path, "default")
+    if os.path.isdir(managed_item) and not os.path.isfile(os.path.join(path, "_METADATA")):
+        path = managed_item
     abstract_state = jtu.tree_map(ocp.utils.to_shape_dtype_struct, state)
 
     with ocp.StandardCheckpointer() as ckpt:

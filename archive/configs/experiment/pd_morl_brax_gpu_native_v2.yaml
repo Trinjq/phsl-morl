@@ -1,0 +1,91 @@
+# @package _global_
+defaults:
+  - /logging
+  - /env: brax/walker2d
+  - /agent: mo-td3
+  - _self_
+
+seed: 42
+formal_reproduction: false
+enable_jit: true
+allow_cpu_smoke: false
+recorders: [log]
+output_dir: "outputs/pd_morl_10m_exp8_k320_b512_i10_seed42"
+log_interval: 100
+
+workflow_cls: evorl.algorithms.mo_td3.PDMORLGPUWorkflow
+matmul_precision: highest
+
+# Ten logical preference groups, each replicated over 16 physical lanes.
+process_count: 10
+envs_per_preference_group: 16
+num_envs: 160
+rollout_length: 4
+fold_iters: 4
+
+# Includes prefill and training base transitions. Excludes evaluation and HER.
+total_timesteps: 10000960
+random_timesteps: 1600
+learning_start_timesteps: 4160
+learner_start_replay_entries: 4096
+
+replay_batch_size: 512
+batch_size: 512
+critic_updates_per_rollout: 320
+replay_buffer_capacity: 2000000
+
+reward_size: 2
+start_timesteps: 10000
+her_start_timesteps: 10000  # faithful-only compatibility field
+her_start_base_transitions: 100000
+num_relabel_preferences: 3
+
+discount: 0.995
+tau: 0.005
+exploration_epsilon: 0.1
+policy_noise: 0.2
+clip_policy_noise: 0.5
+actor_update_interval: 10
+actor_loss_coeff: 10
+num_updates_per_iter: 1
+normalize_obs: false
+
+num_eval_envs: 10
+eval_episodes: 3
+eval_batch_size: 64
+run_final_evaluation: true
+hv_history:
+  enable: true
+  write_csv: true
+  plot_on_finish: true
+  console_output: false
+
+convergence_eval:
+  enable: true
+  interval_transitions: 250000
+  preference_step: 0.02
+  repeats: 3
+  write_csv: true
+  plot_on_finish: true
+  console_output: false
+
+key_diagnostics:
+  enable: false
+
+agent_network:
+  critic_hidden_layer_sizes: [400, 400]
+  actor_hidden_layer_sizes: [400, 400]
+
+optimizer:
+  lr: 0.0003
+  grad_clip_norm: 100
+
+interp_artifact_path: configs/artifacts/interp_objs_walker2d_brax_v3.txt
+save_replay_buffer: false
+checkpoint:
+  enable: true
+  save_interval_steps: 100000
+  max_to_keep: 5
+
+env:
+  max_episode_steps: 500

@@ -1,0 +1,92 @@
+[
+  {
+    "epg": 8,
+    "num_envs": 80,
+    "microbenchmark": {
+      "epg": 8,
+      "num_envs": 80,
+      "compile_time_s": 25.35487587330863,
+      "steady_time_s": 19.46705040195957,
+      "transitions_per_s": 1315.0425704668173,
+      "critic_updates_per_s": 41.09508032708804,
+      "data_reuse_intensity": 128.0,
+      "peak_gpu_mem_mb": 1217.617431640625
+    },
+    "short_learning": {
+      "epg": 8,
+      "num_envs": 80,
+      "k": 10,
+      "budget_transitions": 201280,
+      "total_wall_clock_s": 238.7619912819937,
+      "source_hv": 7066.269813458523,
+      "source_sparsity": 13.835987804985052,
+      "source_pareto_point_count": 9,
+      "mean_repeat_hv": 7710.698553721129,
+      "mean_repeat_sparsity": 35.60976405547,
+      "mean_repeat_pareto_count": 11.666666666666666,
+      "repeat_hv": [
+        7728.795571906026,
+        7668.214230753743,
+        7735.0858585036185
+      ],
+      "repeat_sparsity": [
+        18.097482982341635,
+        66.61575178830793,
+        22.116057395760436
+      ],
+      "obj0_range": [
+        49.7529182434082,
+        51.171817779541016
+      ],
+      "obj1_range": [
+        112.4042739868164,
+        138.599853515625
+      ]
+    }
+  },
+  {
+    "epg": 16,
+    "num_envs": 160,
+    "microbenchmark": {
+      "epg": 16,
+      "num_envs": 160,
+      "compile_time_s": 19.303617037832737,
+      "steady_time_s": 22.205602252855897,
+      "transitions_per_s": 2305.7244481362845,
+      "critic_updates_per_s": 36.026944502129446,
+      "data_reuse_intensity": 64.0,
+      "peak_gpu_mem_mb": 1547.986083984375
+    },
+    "short_learning": {
+      "epg": 16,
+      "num_envs": 160,
+      "k": 10,
+      "budget_transitions": 201280,
+      "total_wall_clock_s": 212.5162742198445,
+      "source_hv": 9875.06662287307,
+      "source_sparsity": 146.83699341383593,
+      "source_pareto_point_count": 26,
+      "mean_repeat_hv": 13935.006338237863,
+      "mean_repeat_sparsity": 1861.8818322086415,
+      "mean_repeat_pareto_count": 21.666666666666668,
+      "repeat_hv": [
+        11995.413694857358,
+        15075.133226730366,
+        14734.472093125863
+      ],
+      "repeat_sparsity": [
+        1491.2841000480746,
+        2454.690879665334,
+        1639.6705169125157
+      ],
+      "obj0_range": [
+        12.830389976501465,
+        39.970706939697266
+      ],
+      "obj1_range": [
+        166.59951782226562,
+        318.0519714355469
+      ]
+    }
+  }
+]

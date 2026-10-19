@@ -10,14 +10,24 @@ import time
 from pathlib import Path
 
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+if __name__ == "__main__":
+    # Set before imports initialize the backend: a fixed key does not stabilize GPU reductions.
+    os.environ["XLA_FLAGS"] = (
+        os.environ.get("XLA_FLAGS", "") + " --xla_gpu_deterministic_ops=true"
+    ).strip()
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from flax import serialization
 
-from evorl.algorithms.mo_td3 import PreferenceActor, TwinVectorCritic
+from evorl.algorithms.mo_td3 import (
+    PreferenceActor,
+    TwinVectorCritic,
+    twin_smooth_l1_loss,
+)
 from evorl.envs.brax import create_wrapped_brax_env
 from evorl.envs.wrappers.training_wrapper import AutoresetMode
 from evorl.replay_buffers import ReplayBuffer
@@ -29,12 +39,14 @@ from evorl.utils.pd_morl_interpolator import key_preferences
 
 SEED = 42
 NUM_ENVS = 64
-ROLLOUT_LENGTH = 4
+ROLLOUT_LENGTH = 1
 CHUNK_SIZE = NUM_ENVS * ROLLOUT_LENGTH
-TOTAL_ENV_STEPS = 2_000_128
+CRITIC_UPDATES_PER_CHUNK = 8
+TOTAL_ENV_STEPS = 5_000_000
 RANDOM_ACTION_STEPS = 25_088
-FIRST_CHUNK_UPDATES = 57
-BATCH_SIZE = 100
+BATCH_SIZE = 256
+SMOKE_ENV_STEPS = 1024
+SMOKE_RANDOM_ACTION_STEPS = 768
 REPLAY_CAPACITY = 500_000
 POLICY_FREQ = 2
 EVAL_EPISODES = 10
@@ -84,6 +96,11 @@ def replay_next_obs_and_done(trajectory: SampleBatch, obs_dim: int):
     return next_obs, done
 
 
+def updates_for_chunk(chunk_index: int) -> int:
+    """Perform a fixed update block once replay reaches two minibatches."""
+    return CRITIC_UPDATES_PER_CHUNK if (chunk_index + 1) * CHUNK_SIZE >= 2 * BATCH_SIZE else 0
+
+
 def expected_update_counts(
     total_env_steps: int = TOTAL_ENV_STEPS,
     random_action_steps: int = RANDOM_ACTION_STEPS,
@@ -95,11 +112,14 @@ def expected_update_counts(
     random_chunks = random_action_steps // CHUNK_SIZE
     if total_chunks < 1 or random_chunks < 1 or random_chunks > total_chunks:
         raise ValueError("invalid training budget")
-    critic = FIRST_CHUNK_UPDATES + (total_chunks - 1) * CHUNK_SIZE
+    initial_no_update_chunks = (2 * BATCH_SIZE - 1) // CHUNK_SIZE
+    critic = max(0, total_chunks - initial_no_update_chunks) * CRITIC_UPDATES_PER_CHUNK
     return {
         "chunk_size": CHUNK_SIZE,
         "total_chunks": total_chunks,
         "random_action_chunks": random_chunks,
+        "initial_no_update_chunks": initial_no_update_chunks,
+        "first_learning_chunk_updates": updates_for_chunk(initial_no_update_chunks),
         "critic_optimizer_steps": critic,
         "actor_optimizer_steps": critic // POLICY_FREQ,
     }
@@ -112,9 +132,12 @@ def train_single_key(
     total_env_steps: int = TOTAL_ENV_STEPS,
     random_action_steps: int = RANDOM_ACTION_STEPS,
     smoke: bool = False,
+    output_dir: Path | None = None,
 ) -> tuple[np.ndarray, dict]:
     """Train one key and return its best fixed-key evaluation result."""
     counts = expected_update_counts(total_env_steps, random_action_steps)
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=False)
     base_preference = jnp.asarray(preference, dtype=jnp.float32)
     rng = jax.random.PRNGKey(seed)
 
@@ -255,6 +278,7 @@ def train_single_key(
                     inner_target_actor,
                     inner_target_critic,
                     inner_step,
+                    inner_last_actor_loss,
                 ) = inner
                 sample_key, noise_key = jax.random.split(step_key)
                 sample = replay.sample(current_replay, sample_key)
@@ -290,7 +314,7 @@ def train_single_key(
                     values = critic.apply(
                         params, sample.obs, sampled_preference, sample.actions
                     )
-                    return jnp.mean(optax.huber_loss(values, target_q[..., None, :]))
+                    return twin_smooth_l1_loss(values, target_q)
 
                 critic_loss_value, critic_grad = jax.value_and_grad(critic_loss)(
                     inner_critic
@@ -300,6 +324,7 @@ def train_single_key(
                 )
                 inner_critic = optax.apply_updates(inner_critic, critic_updates)
                 inner_step = inner_step + 1
+                should_update_actor = inner_step % POLICY_FREQ == 0
 
                 def update_actor(params, params_opt, target_actor, target_critic):
                     def actor_loss(actor_params):
@@ -340,13 +365,16 @@ def train_single_key(
                     inner_target_critic,
                     actor_loss_value,
                 ) = jax.lax.cond(
-                    inner_step % POLICY_FREQ == 0,
+                    should_update_actor,
                     update_actor,
                     skip_actor,
                     inner_actor,
                     inner_actor_opt,
                     inner_target_actor,
                     inner_target_critic,
+                )
+                inner_last_actor_loss = jnp.where(
+                    should_update_actor, actor_loss_value, inner_last_actor_loss
                 )
                 return (
                     inner_critic,
@@ -356,7 +384,8 @@ def train_single_key(
                     inner_target_actor,
                     inner_target_critic,
                     inner_step,
-                ), (critic_loss_value, actor_loss_value)
+                    inner_last_actor_loss,
+                ), critic_loss_value
 
             inner = (
                 current_critic,
@@ -366,9 +395,14 @@ def train_single_key(
                 current_target_actor,
                 current_target_critic,
                 critic_step,
+                jnp.asarray(jnp.nan, dtype=jnp.float32),
             )
-            update_keys = jax.random.split(update_key, update_count)
-            inner, losses = jax.lax.scan(update_step, inner, update_keys)
+            if update_count:
+                update_keys = jax.random.split(update_key, update_count)
+                inner, losses = jax.lax.scan(update_step, inner, update_keys)
+                last_critic_loss = losses[-1]
+            else:
+                last_critic_loss = jnp.asarray(jnp.nan, dtype=jnp.float32)
             (
                 current_critic,
                 current_critic_opt,
@@ -377,6 +411,7 @@ def train_single_key(
                 current_target_actor,
                 current_target_critic,
                 critic_step,
+                last_actor_loss,
             ) = inner
             return (
                 key,
@@ -391,15 +426,13 @@ def train_single_key(
                 critic_step,
             ), PyTreeDict(
                 completed_episodes=completed_episodes,
-                critic_loss=losses[0][-1],
-                actor_loss=jnp.max(losses[1]),
+                critic_loss=last_critic_loss,
+                actor_loss=last_actor_loss,
             )
 
         return train_chunk
 
-    first_random_chunk = make_train_chunk(True, FIRST_CHUNK_UPDATES)
-    later_random_chunk = make_train_chunk(True, CHUNK_SIZE)
-    policy_chunk = make_train_chunk(False, CHUNK_SIZE)
+    chunk_fns = {}
     rng, reset_key = jax.random.split(rng)
     env_state = train_env.reset(reset_key)
     carry = (
@@ -453,6 +486,9 @@ def train_single_key(
             best_vector = mean_np.copy()
             best_std = std_np.copy()
             best_step = step
+            if output_dir is not None:
+                save_key_networks(output_dir / "best_networks.msgpack", carry, seed,
+                                  preference, step, mean_np)
         evaluation_history.append(
             {
                 "step": step,
@@ -464,13 +500,26 @@ def train_single_key(
             }
         )
 
+        if output_dir is not None:
+            _write_metadata(output_dir / "progress.json", {
+                "status": "running", "seed": seed, "preference": preference.tolist(),
+                "actual_environment_steps": step, "total_environment_steps": total_env_steps,
+                "completed_episodes": completed_episodes_total,
+                "best_step": best_step, "best_scalarized_return": best_scalar,
+                "best_vector_return": best_vector.tolist(),
+                "last_evaluation": evaluation_history[-1],
+            })
+            print(f"seed={seed} steps={step}/{total_env_steps} "
+                  f"score={scalar_value:.3f} best={best_scalar:.3f}", flush=True)
+            if phase == "training_final":
+                save_key_networks(output_dir / "final_networks.msgpack", carry, seed,
+                                  preference, step, mean_np)
+
     for chunk_index in range(counts["total_chunks"]):
-        if chunk_index == 0:
-            chunk_fn = first_random_chunk
-        elif chunk_index < counts["random_action_chunks"]:
-            chunk_fn = later_random_chunk
-        else:
-            chunk_fn = policy_chunk
+        schedule = (chunk_index < counts["random_action_chunks"], updates_for_chunk(chunk_index))
+        if schedule not in chunk_fns:
+            chunk_fns[schedule] = make_train_chunk(*schedule)
+        chunk_fn = chunk_fns[schedule]
         carry, chunk_metrics = jax.lax.scan(chunk_fn, carry, None, length=1)
         completed_episodes_total += int(np.asarray(chunk_metrics.completed_episodes[0]))
         while completed_episodes_total >= next_evaluation_episode:
@@ -493,6 +542,8 @@ def train_single_key(
         raise AssertionError(f"critic count mismatch: {final_metrics}")
     if not np.isfinite(final_metrics["last_critic_loss"]):
         raise FloatingPointError("non-finite critic loss")
+    if not np.isfinite(final_metrics["last_actor_loss"]):
+        raise FloatingPointError("non-finite actor loss")
     if best_vector is None or not np.isfinite(best_vector).all():
         raise FloatingPointError("no finite evaluation result")
     return best_vector, {
@@ -506,7 +557,24 @@ def train_single_key(
         "elapsed_seconds": elapsed,
         "counts": final_metrics,
         "expected_counts": counts,
+        "sampling_schedule": {
+            "num_envs": NUM_ENVS,
+            "rollout_length": ROLLOUT_LENGTH,
+            "chunk_size": CHUNK_SIZE,
+            "batch_size": BATCH_SIZE,
+            "learning_rate": LEARNING_RATE,
+            "critic_updates_per_chunk": CRITIC_UPDATES_PER_CHUNK,
+            "actor_updates_per_chunk": CRITIC_UPDATES_PER_CHUNK // POLICY_FREQ,
+            "learning_starts": 2 * BATCH_SIZE,
+            "initial_no_update_chunks": counts["initial_no_update_chunks"],
+            "first_learning_chunk_updates": counts["first_learning_chunk_updates"],
+        },
         "smoke": smoke,
+        "jax_backend": jax.default_backend(),
+        "jax_devices": [str(device) for device in jax.devices()],
+        "jax_version": jax.__version__,
+        "physical_gpu": os.environ.get("CUDA_VISIBLE_DEVICES"),
+        "xla_flags": os.environ.get("XLA_FLAGS", ""),
     }
 
 
@@ -520,18 +588,35 @@ def _git_commit() -> str:
 
 
 def _write_metadata(path: Path, metadata: dict) -> None:
-    path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def save_key_networks(path, carry, seed, preference, step, returns):
+    """Save weights for independent evaluation; this is not a full resume state."""
+    names = ("actor_params", "critic_params", "target_actor_params", "target_critic_params")
+    snapshot = {**dict(zip(names, carry[2:6])), "seed": seed, "step": step,
+                "preference": np.asarray(preference), "vector_return": np.asarray(returns)}
+    temporary = path.with_suffix(".tmp")
+    temporary.write_bytes(serialization.to_bytes(jax.device_get(snapshot)))
+    temporary.replace(path)
 
 
 def run_smoke(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=False)
     key = np.asarray(key_preferences(2)[1], dtype=np.float32)
     result, run_metadata = train_single_key(
-        key, SEED, total_env_steps=512, random_action_steps=256, smoke=True
+        key, SEED, total_env_steps=SMOKE_ENV_STEPS,
+        random_action_steps=SMOKE_RANDOM_ACTION_STEPS, smoke=True
     )
     assert np.isfinite(result).all()
-    assert run_metadata["counts"]["critic_optimizer_step_count"] == 313
+    assert run_metadata["counts"]["critic_optimizer_step_count"] == expected_update_counts(
+        SMOKE_ENV_STEPS, SMOKE_RANDOM_ACTION_STEPS
+    )["critic_optimizer_steps"]
     assert np.isfinite(run_metadata["counts"]["last_critic_loss"])
+    assert np.isfinite(run_metadata["counts"]["last_actor_loss"])
+    assert run_metadata["counts"]["last_actor_loss"] != 0.0
     _write_metadata(output_dir / "smoke.json", run_metadata)
 
 
@@ -539,14 +624,33 @@ def run_full(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=False)
     keys = np.asarray(key_preferences(2), dtype=np.float32)
     seeds = [SEED + 17 * index for index in range(len(keys))]
-    results = []
     per_key = []
     for key, key_seed in zip(keys, seeds):
-        result, metadata = train_single_key(key, key_seed)
-        results.append(result)
+        _, metadata = train_single_key(key, key_seed)
         per_key.append(metadata)
 
+    write_artifact(output_dir, per_key)
+
+
+def write_artifact(output_dir: Path, per_key: list[dict]) -> None:
+    keys = np.asarray([item["preference"] for item in per_key])
+    np.testing.assert_array_equal(keys, key_preferences(2))
+    seeds = [item["seed"] for item in per_key]
+    if len(set(seeds)) != 3:
+        raise ValueError("three independent key seeds are required")
+    if any("sampling_schedule" not in item for item in per_key):
+        raise ValueError("key metadata lacks sampling_schedule; assemble with its original training script")
+    sampling_schedule = per_key[0]["sampling_schedule"]
+    if any(item["sampling_schedule"] != sampling_schedule for item in per_key):
+        raise ValueError("all three keys must use the same sampling schedule")
+    if not {"batch_size", "learning_rate", "critic_updates_per_chunk",
+            "actor_updates_per_chunk"}.issubset(sampling_schedule):
+        raise ValueError("key metadata lacks update configuration; assemble with its original training script")
+    results = [item["best_vector_return"] for item in per_key]
+
     candidate_path = output_dir / "interp_objs_walker2d_brax.candidate.txt"
+    if candidate_path.exists() or (output_dir / "interp_objs_walker2d_brax.metadata.json").exists():
+        raise FileExistsError("refusing to overwrite an existing key artifact")
     np.savetxt(candidate_path, np.asarray(results), delimiter=",")
     artifact_sha256 = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
     metadata = {
@@ -557,38 +661,66 @@ def run_full(output_dir: Path) -> None:
         "per_key": per_key,
         "hyperparameters": {
             "gamma": GAMMA,
-            "batch_size": BATCH_SIZE,
             "replay_capacity": REPLAY_CAPACITY,
             "policy_freq": POLICY_FREQ,
+            "critic_loss_aggregation": "sum_of_per_critic_mean_smooth_l1",
             "evaluation_episodes": EVAL_EPISODES,
-            "num_envs": NUM_ENVS,
-            "rollout_length": ROLLOUT_LENGTH,
-            "total_env_steps": TOTAL_ENV_STEPS,
-            "random_action_steps": RANDOM_ACTION_STEPS,
-            "first_chunk_updates": FIRST_CHUNK_UPDATES,
+            **sampling_schedule,
+            "total_env_steps": per_key[0]["counts"]["actual_environment_steps"],
+            "random_action_steps": per_key[0]["counts"]["random_action_steps"],
+            "first_chunk_updates": (sampling_schedule["critic_updates_per_chunk"]
+                                    if sampling_schedule["initial_no_update_chunks"] == 0 else 0),
         },
         "vectorization_note": (
-            "Budgets are rounded up to multiples of num_envs * rollout_length = 256; "
-            "the first 256-transition block performs 57 updates after replay reaches 200 entries."
+            f"Each block collects {sampling_schedule['chunk_size']} transitions. "
+            f"Updates start at replay size {sampling_schedule['learning_starts']}; "
+            f"skip {sampling_schedule['initial_no_update_chunks']} blocks, then perform "
+            f"{sampling_schedule['first_learning_chunk_updates']} critic updates. "
+            f"Subsequent blocks perform {sampling_schedule['critic_updates_per_chunk']} critic "
+            f"and {sampling_schedule['actor_updates_per_chunk']} actor updates."
         ),
         "git_commit": _git_commit(),
         "command": sys.argv,
         "jax_version": jax.__version__,
-        "jax_backend": jax.default_backend(),
-        "jax_devices": [repr(device) for device in jax.devices()],
+        "matmul_precision": str(jax.config.jax_default_matmul_precision),
+        "jax_backend": per_key[0]["jax_backend"],
+        "jax_devices": per_key[0]["jax_devices"],
+        "smoke": all(item["smoke"] for item in per_key),
     }
     _write_metadata(output_dir / "interp_objs_walker2d_brax.metadata.json", metadata)
-    print(json.dumps(metadata, indent=2), flush=True)
+    print(f"Saved artifact: {candidate_path}; seeds={seeds}", flush=True)
 
 
 def main() -> None:
+    jax.config.update("jax_default_matmul_precision", "highest")
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/key_retrain"))
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--key-index", type=int, choices=range(3))
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--assemble-seeds", nargs=3, type=int)
     args = parser.parse_args()
+    if args.assemble_seeds is not None:
+        per_key = [json.loads((args.output_dir / f"key_{i}_seed_{seed}" / "metadata.json").read_text())
+                   for i, seed in enumerate(args.assemble_seeds)]
+        write_artifact(args.output_dir, per_key)
+        return
     if args.output_dir.exists():
         raise FileExistsError(f"refusing to overwrite {args.output_dir}")
-    if args.smoke:
+    if args.key_index is not None:
+        if args.seed is None or args.seed < 0:
+            parser.error("--key-index requires a nonnegative --seed")
+        if jax.default_backend() != "gpu" or len(jax.devices()) != 1:
+            raise RuntimeError("single-key jobs require exactly one visible GPU")
+        key = np.asarray(key_preferences(2)[args.key_index], dtype=np.float32)
+        kwargs = {"total_env_steps": SMOKE_ENV_STEPS,
+                  "random_action_steps": SMOKE_RANDOM_ACTION_STEPS} if args.smoke else {}
+        _, metadata = train_single_key(key, args.seed, smoke=args.smoke,
+                                       output_dir=args.output_dir, **kwargs)
+        _write_metadata(args.output_dir / "metadata.json", metadata)
+        progress = json.loads((args.output_dir / "progress.json").read_text())
+        _write_metadata(args.output_dir / "progress.json", {**progress, "status": "complete"})
+    elif args.smoke:
         run_smoke(args.output_dir)
     else:
         run_full(args.output_dir)

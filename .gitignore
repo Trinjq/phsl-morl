@@ -249,3 +249,8 @@ pip-selfcheck.json
 /debug
 # /test*.py
 .conda
+
+# Historical scripts are versioned evidence, not virtualenv directories.
+!/archive/
+!/archive/**
+/reports/

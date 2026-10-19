@@ -17,7 +17,11 @@ def sample_her_preferences(
     values = jnp.abs(jax.random.normal(key, (num_preferences, objective_size)))
     norm = jnp.sum(values, axis=-1, keepdims=True)
     norm = jnp.maximum(norm, jnp.finfo(values.dtype).tiny)
-    return jnp.round(values / norm, decimals=3)
+    preferences = jnp.round(values / norm, decimals=3)
+    if objective_size == 2:
+        # Avoid independent float32 rounding moving the sum to 0.999 or 1.001.
+        preferences = preferences.at[:, 1].set(1.0 - preferences[:, 0])
+    return preferences
 
 
 def expand_her_transitions(

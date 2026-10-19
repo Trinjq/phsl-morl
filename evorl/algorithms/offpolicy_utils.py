@@ -104,6 +104,8 @@ class OffPolicyWorkflowTemplate(OffPolicyWorkflow):
         action_space = self.env.action_space
         obs_space = self.env.obs_space
         config = self.config
+        if config.get("resume_from_checkpoint") or config.get("resume_latest", False):
+            return state
         replay_buffer_state = state.replay_buffer_state
         agent_state = state.agent_state
 

@@ -1,0 +1,18 @@
+# @package _global_
+defaults:
+  - pd_morl_brax_gpu_native_v2
+  - _self_
+
+# Schedule-only ablation: all inherited algorithm, artifact, reward, and
+# evaluation settings remain identical to pd_morl_brax_gpu_native_v2.
+process_count: 10
+envs_per_preference_group: 1
+num_envs: 10
+rollout_length: 1
+fold_iters: 1
+batch_size: 256
+replay_batch_size: 256
+critic_updates_per_rollout: 10
+actor_update_interval: 10
+
+output_dir: outputs/pd_morl_schedule_stability/source_like/seed_42

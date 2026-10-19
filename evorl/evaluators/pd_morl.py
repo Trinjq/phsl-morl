@@ -80,9 +80,12 @@ def load_key_solution_artifact(
     if not np.isfinite(solutions).all():
         raise ValueError("key solutions must be finite")
 
+    artifact_bytes = path.read_bytes()
+    if path.suffix != ".npz":
+        artifact_bytes = artifact_bytes.replace(b"\r\n", b"\n")
     provenance = KeySolutionArtifact(
         path=str(path),
-        sha256=sha256(path.read_bytes()).hexdigest(),
+        sha256=sha256(artifact_bytes).hexdigest(),
         shape=solutions.shape,
         dtype=str(solutions.dtype),
         key_preferences=keys.tolist(),
@@ -323,6 +326,13 @@ class PDMORLEvaluator:
             preferences,
             repeats,
         )
+
+    def evaluate_keys_device(
+        self, agent_state: AgentState, repeats: int = 3
+    ) -> jax.Array:
+        """Return key returns through the evaluator interface used by the workflow."""
+        result = self.evaluate(agent_state, key_preferences(2), repeats)
+        return jnp.asarray(result.returns_per_repeat)
 
 
 class BatchedPDMORLEvaluator:

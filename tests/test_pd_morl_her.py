@@ -52,6 +52,7 @@ def test_official_her_sampler_jit_and_vmap():
     key = jax.random.PRNGKey(0)
     raw = jnp.abs(jax.random.normal(key, (3, 2)))
     expected = jnp.round(raw / jnp.sum(raw, axis=-1, keepdims=True), 3)
+    expected = expected.at[:, 1].set(1.0 - expected[:, 0])
     sample = jax.jit(sample_her_preferences, static_argnums=(1, 2))(key, 3, 2)
 
     assert sample.shape == (3, 2)
@@ -61,6 +62,18 @@ def test_official_her_sampler_jit_and_vmap():
         jax.random.split(key, 4)
     )
     assert vmapped.shape == (4, 3, 2)
+    assert jnp.all(jnp.sum(vmapped, axis=-1) == 1.0)
+
+
+def test_two_objective_her_rounding_preserves_simplex_at_scale():
+    # This seed exposed 36 independent-rounding failures before the fix.
+    sample = jax.jit(sample_her_preferences, static_argnums=(1, 2))(
+        jax.random.PRNGKey(20261016), 1_000_000, 2
+    )
+    assert jnp.all(jnp.isfinite(sample))
+    assert jnp.all((sample >= 0.0) & (sample <= 1.0))
+    assert jnp.all(jnp.sum(sample, axis=-1) == 1.0)
+    assert jnp.all(jnp.abs(sample - jnp.round(sample, 3)) <= jnp.finfo(sample.dtype).eps)
 
 
 def test_original_relabels_and_transition_invariants():

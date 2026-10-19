@@ -89,6 +89,15 @@ def test_mo_actor_critic_shapes_architecture_and_independence():
         assert all(jnp.all(layer["bias"] == 0) for layer in params.values())
     assert _tree_changed(critic_params["critic_0"], critic_params["critic_1"])
 
+    for params in (actor_params, critic_params["critic_0"], critic_params["critic_1"]):
+        for layer in params.values():
+            kernel = layer["kernel"]
+            expected_std = jnp.sqrt(2.0 / sum(kernel.shape))
+            assert jnp.isclose(jnp.std(kernel), expected_std, rtol=0.12)
+            assert jnp.all(layer["bias"] == 0)
+        # Variance-corrected truncated Xavier has no samples beyond 3 sigma.
+        assert jnp.any(jnp.abs(params["hidden_1"]["kernel"]) > 3.0 / jnp.sqrt(400.0))
+
 
 def test_scalarization_and_whole_vector_target_selection():
     q_values = jnp.array([[1.0, 10.0], [5.0, 2.0]])
@@ -108,6 +117,12 @@ def test_scalarization_and_whole_vector_target_selection():
     assert jnp.array_equal(selected[0], jnp.array([1.0, 10.0]))
     assert jnp.array_equal(selected[1], jnp.array([5.0, 2.0]))
     assert not jnp.any(jnp.all(selected == jnp.array([1.0, 2.0]), axis=-1))
+
+
+def test_twin_smooth_l1_is_sum_of_per_critic_means():
+    values = jnp.asarray([[[1.0, 1.0], [1.0, 1.0]], [[2.0, 2.0], [2.0, 2.0]]])
+    target = jnp.zeros((2, 2))
+    assert twin_smooth_l1_loss(values, target) == 2.0
 
 
 def test_vector_target_done_mask_smoothing_and_losses_jit():
